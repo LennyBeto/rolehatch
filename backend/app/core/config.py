@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     supabase_jwt_secret: str
     upstash_redis_url: str
     upstash_redis_token: str
+    stripe_secret_key: str
+    stripe_webhook_secret: str
+    frontend_url: str
     allowed_origins: list[str] = ["https://rolehatch.com"]
 
     class Config:

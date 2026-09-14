@@ -24,3 +24,10 @@
 - [x] Frontend: search bar, filter sidebar (environment + salary), job list wired to API
 - [ ] Auth UI (Supabase sign-in), Save/Mark Applied buttons
 - [ ] Live deployment walkthrough end-to-end
+
+## Phase 3 — Auth + Live Deployment (2026-09-15)
+- [x] Supabase magic-link auth, AuthContext, Save/Mark Applied/Hide wired end-to-end
+- [x] Backend saved_jobs endpoints, JWT-scoped + RLS-backed
+- [x] Live deployment: Supabase, GCP secrets, Cloud Run, Vercel, custom domains, scheduler
+- [ ] Onboard first real company boards (Workday/BambooHR adapters)
+- [ ] Promoted-listings billing flow
