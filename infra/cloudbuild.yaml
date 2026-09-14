@@ -1,0 +1,51 @@
+# infra/cloudbuild.yaml
+steps:
+  # 1. Build the backend image
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-t"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/rolehatch/api:$SHORT_SHA"
+      - "-t"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/rolehatch/api:latest"
+      - "./backend"
+
+  # 2. Push both tags
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "us-central1-docker.pkg.dev/$PROJECT_ID/rolehatch/api:$SHORT_SHA"]
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "us-central1-docker.pkg.dev/$PROJECT_ID/rolehatch/api:latest"]
+
+  # 3. Deploy to Cloud Run, secrets pulled fresh from Secret Manager each deploy
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "rolehatch-api"
+      - "--image=us-central1-docker.pkg.dev/$PROJECT_ID/rolehatch/api:$SHORT_SHA"
+      - "--region=us-central1"
+      - "--allow-unauthenticated"
+      - "--min-instances=0"
+      - "--max-instances=10"
+      - "--set-secrets=DATABASE_URL=database-url:latest,SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,UPSTASH_REDIS_TOKEN=upstash-token:latest,SCHEDULER_SECRET=scheduler-secret:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest"
+      - "--set-env-vars=ALLOWED_ORIGINS=https://rolehatch.com,UPSTASH_REDIS_URL=${_UPSTASH_URL},FRONTEND_URL=https://rolehatch.com"
+
+  # 4. Run migrations after deploy (idempotent — safe to run every time)
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        pip install --quiet alembic sqlalchemy psycopg2-binary
+        DATABASE_URL=$$(gcloud secrets versions access latest --secret=database-url) alembic -c backend/alembic.ini upgrade head
+
+images:
+  - "us-central1-docker.pkg.dev/$PROJECT_ID/rolehatch/api:$SHORT_SHA"
+  - "us-central1-docker.pkg.dev/$PROJECT_ID/rolehatch/api:latest"
+
+substitutions:
+  _UPSTASH_URL: "https://your-instance.upstash.io"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
