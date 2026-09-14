@@ -17,3 +17,10 @@
 - [x] Supabase RLS policies for saved_jobs (own-row access), jobs (public read, service-role write)
 - [ ] Wire scraper output → upsert into Job model
 - [ ] Frontend search/filter UI
+
+## Phase 2 — Pipeline + Frontend UI (2026-09-14)
+- [x] Idempotent upsert pipeline (Greenhouse/Lever → Postgres), Redis dedup, stale deactivation
+- [x] Hourly Cloud Scheduler → /internal/sync-jobs, secret-header protected
+- [x] Frontend: search bar, filter sidebar (environment + salary), job list wired to API
+- [ ] Auth UI (Supabase sign-in), Save/Mark Applied buttons
+- [ ] Live deployment walkthrough end-to-end
