@@ -23,3 +23,5 @@ export const markApplied = (jobId: string) =>
 
 export const hideJob = (jobId: string) =>
   authedFetch(`/api/saved-jobs/${jobId}`, { method: "PATCH", body: JSON.stringify({ status: "hidden" }) });
+
+export { authedFetch };

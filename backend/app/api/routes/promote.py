@@ -56,3 +56,22 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             db.commit()
 
     return {"received": True}
+
+@router.get("/my-jobs")
+def my_jobs(user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user_domain = user.get("email", "").split("@")[-1].lower()
+    company = db.query(Company).filter(func.lower(Company.domain) == user_domain).first()
+    if not company:
+        return []
+
+    jobs = db.query(Job).filter_by(company_id=company.id, is_active=True).all()
+    now = datetime.now(timezone.utc)
+    return [
+        {
+            "id": str(j.id),
+            "title": j.title,
+            "is_featured": bool(j.featured_until and j.featured_until > now),
+            "featured_until": j.featured_until.isoformat() if j.featured_until else None,
+        }
+        for j in jobs
+    ]
