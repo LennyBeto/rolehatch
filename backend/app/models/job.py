@@ -42,7 +42,8 @@ class Job(Base):
     posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     scraped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_active: Mapped[bool] = mapped_column(default=True)  # soft-close stale/removed postings
-
+    featured_until: Mapped["datetime | None"] = mapped_column(DateTime(timezone=True), nullable=True)
+    
     company: Mapped["Company"] = relationship(back_populates="jobs")
 
     __table_args__ = (
