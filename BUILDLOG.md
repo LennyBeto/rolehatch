@@ -31,3 +31,17 @@
 - [x] Live deployment: Supabase, GCP secrets, Cloud Run, Vercel, custom domains, scheduler
 - [ ] Onboard first real company boards (Workday/BambooHR adapters)
 - [ ] Promoted-listings billing flow
+
+## Phase 4 — Workday/BambooHR + Monetization ✅ (2026-09-17)
+- [x] Workday adapter (CXS API pattern, self-throttled, per-tenant isolated failures)
+- [x] BambooHR adapter (public careers JSON feed)
+- [x] featured_until column + featured-first sort in search
+- [x] Stripe Checkout for promoted listings, webhook-verified activation
+- [x] Employer verification: promote endpoint gated on email-domain match to company.domain
+- [x] Employer dashboard: view own listings, promote directly from dashboard
+- [x] Live-mode Stripe cutover checklist documented
+
+## Phase 5 — Not started
+- [ ] Talent Network (opt-in candidate pool, employer search access)
+- [ ] Analytics for employers (views, applicant counts)
+- [ ] Additional scraper sources / direct career-page fallback
