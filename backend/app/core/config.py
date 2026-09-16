@@ -1,5 +1,5 @@
 # backend/app/core/config.py
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,6 +42,16 @@ class Settings(BaseSettings):
         alias="ALLOWED_ORIGINS",
     )
     scheduler_secret: str = Field(..., description="Scheduler Secret", alias="SCHEDULER_SECRET")
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def split_allowed_origins(cls, v):
+        # .env stores this as a plain comma-separated string, e.g.
+        # ALLOWED_ORIGINS=https://rolehatch.com,https://www.rolehatch.com
+        # — without this, Pydantic tries to JSON-decode it and raises on import.
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
 
 settings = Settings()
