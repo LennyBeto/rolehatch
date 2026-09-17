@@ -1,16 +1,35 @@
 // frontend/theme/index.ts
-import { extendTheme } from "@chakra-ui/react";
+import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
 
-const theme = extendTheme({
-  styles: { global: { body: { bg: "#F6F5F1", color: "#1F2A24" } } },
-  colors: {
-    brand: { 500: "#2F4F3F", 600: "#26402F", 700: "#1D3025" },
+const config = defineConfig({
+  globalCss: {
+    body: { bg: "#F6F5F1", color: "#1F2A24" },
   },
-  components: {
-    Button: {
-      baseStyle: { fontWeight: "600" },
-      defaultProps: { colorScheme: "brand" },
+  theme: {
+    tokens: {
+      colors: {
+        brand: {
+          50: { value: "#E8EDEA" },
+          500: { value: "#2F4F3F" },
+          600: { value: "#26402F" },
+          700: { value: "#1D3025" },
+        },
+        background: { value: "#F6F5F1" },
+        surface: { value: "#FFFFFF" },
+      },
+    },
+    semanticTokens: {
+      colors: {
+        brand: {
+          solid: { value: "{colors.brand.500}" },
+          contrast: { value: "white" },
+          fg: { value: "{colors.brand.700}" },
+          muted: { value: "{colors.brand.50}" },
+        },
+      },
     },
   },
 });
-export default theme;
+
+const system = createSystem(defaultConfig, config);
+export default system;

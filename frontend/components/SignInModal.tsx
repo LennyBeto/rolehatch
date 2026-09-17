@@ -1,14 +1,13 @@
 // frontend/components/SignInModal.tsx
 "use client";
-import { Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody,
-  ModalCloseButton, Input, Button, Text, useToast } from "@chakra-ui/react";
+import { Dialog, Input, Button, Text, Portal, CloseButton } from "@chakra-ui/react";
 import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { toaster } from "@/components/ui/toaster";
 
 export default function SignInModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
-  const toast = useToast();
 
   const handleSignIn = async () => {
     const { error } = await supabase.auth.signInWithOtp({
@@ -16,37 +15,36 @@ export default function SignInModal({ isOpen, onClose }: { isOpen: boolean; onCl
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) {
-      toast({ title: "Couldn't send link", description: error.message, status: "error" });
+      toaster.create({ title: "Couldn't send link", description: error.message, type: "error" });
       return;
     }
     setSent(true);
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} isCentered>
-      <ModalOverlay />
-      <ModalContent>
-        <ModalHeader>Sign in to RoleHatch</ModalHeader>
-        <ModalCloseButton />
-        <ModalBody pb={6}>
-          {sent ? (
-            <Text>Check your email for a sign-in link.</Text>
-          ) : (
-            <>
-              <Input
-                placeholder="you@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                type="email"
-                mb={3}
-              />
-              <Button colorScheme="brand" w="full" onClick={handleSignIn}>
-                Send magic link
-              </Button>
-            </>
-          )}
-        </ModalBody>
-      </ModalContent>
-    </Modal>
+    <Dialog.Root open={isOpen} onOpenChange={(e) => !e.open && onClose()} placement="center">
+      <Portal>
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content>
+            <Dialog.Header>Sign in to PerchRole</Dialog.Header>
+            <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
+            <Dialog.Body pb={6}>
+              {sent ? (
+                <Text>Check your email for a sign-in link.</Text>
+              ) : (
+                <>
+                  <Input placeholder="you@email.com" value={email}
+                    onChange={(e) => setEmail(e.target.value)} type="email" mb={3} />
+                  <Button colorPalette="brand" w="full" onClick={handleSignIn}>
+                    Send magic link
+                  </Button>
+                </>
+              )}
+            </Dialog.Body>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Portal>
+    </Dialog.Root>
   );
 }

@@ -1,15 +1,19 @@
 // frontend/app/promote/[jobId]/page.tsx
 "use client";
-import { Box, Heading, Text, Button, useToast } from "@chakra-ui/react";
+import { Box, Heading, Text, Button } from "@chakra-ui/react";
 import { useParams } from "next/navigation";
+import { authedFetch } from "@/lib/api";
+import { toaster } from "@/components/ui/toaster";
 
 export default function PromoteJobPage() {
   const { jobId } = useParams();
-  const toast = useToast();
 
   const handleCheckout = async () => {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/promote/checkout/${jobId}`, { method: "POST" });
-    if (!res.ok) return toast({ title: "Couldn't start checkout", status: "error" });
+    const res = await authedFetch(`/api/promote/checkout/${jobId}`, { method: "POST" });
+    if (!res.ok) {
+      toaster.create({ title: "Couldn't start checkout", type: "error" });
+      return;
+    }
     const { checkout_url } = await res.json();
     window.location.href = checkout_url;
   };
@@ -20,7 +24,7 @@ export default function PromoteJobPage() {
       <Text color="gray.600" mb={6}>
         Pin your job to the top of search results for 14 days — $49.
       </Text>
-      <Button colorScheme="brand" onClick={handleCheckout}>Promote with Stripe</Button>
+      <Button colorPalette="brand" onClick={handleCheckout}>Promote with Stripe</Button>
     </Box>
   );
 }

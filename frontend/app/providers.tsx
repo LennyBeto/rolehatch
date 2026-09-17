@@ -1,13 +1,17 @@
-// frontend/app/providers.tsx — wrap both Chakra and Auth
+// frontend/app/providers.tsx
 "use client";
 import { ChakraProvider } from "@chakra-ui/react";
-import theme from "@/theme";
+import system from "@/theme";
 import { AuthProvider } from "@/lib/AuthContext";
+import { Toaster } from "@/components/ui/toaster";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <ChakraProvider theme={theme}>
-      <AuthProvider>{children}</AuthProvider>
+    <ChakraProvider value={system}>
+      <AuthProvider>
+        {children}
+        <Toaster />
+      </AuthProvider>
     </ChakraProvider>
   );
 }

@@ -1,10 +1,11 @@
 // frontend/app/dashboard/page.tsx
 "use client";
-import { Box, Heading, Text, Stack, Button, Badge, useToast } from "@chakra-ui/react";
+import { Box, Heading, Text, Stack, Button, Badge } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { useRouter } from "next/navigation";
 import { authedFetch } from "@/lib/api";
+import { toaster } from "@/components/ui/toaster";
 
 type EmployerJob = {
   id: string; title: string; is_featured: boolean; featured_until: string | null;
@@ -14,7 +15,6 @@ export default function EmployerDashboard() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [jobs, setJobs] = useState<EmployerJob[]>([]);
-  const toast = useToast();
 
   useEffect(() => {
     if (!loading && !user) router.replace("/");
@@ -25,12 +25,15 @@ export default function EmployerDashboard() {
     authedFetch("/api/promote/my-jobs")
       .then((res) => res.json())
       .then(setJobs)
-      .catch(() => toast({ title: "Couldn't load your jobs", status: "error" }));
-  }, [user, toast]);
+      .catch(() => toaster.create({ title: "Couldn't load your jobs", type: "error" }));
+  }, [user]);
 
   const promote = async (jobId: string) => {
     const res = await authedFetch(`/api/promote/checkout/${jobId}`, { method: "POST" });
-    if (!res.ok) return toast({ title: "Not authorized to promote this listing", status: "error" });
+    if (!res.ok) {
+      toaster.create({ title: "Not authorized to promote this listing", type: "error" });
+      return;
+    }
     const { checkout_url } = await res.json();
     window.location.href = checkout_url;
   };
@@ -39,14 +42,14 @@ export default function EmployerDashboard() {
     <Box maxW="700px" mx="auto" mt={12} px={4}>
       <Heading size="lg" mb={1}>Employer Dashboard</Heading>
       <Text color="gray.600" mb={6}>Listings matching your verified email domain.</Text>
-      <Stack spacing={3}>
+      <Stack gap={3}>
         {jobs.map((job) => (
           <Box key={job.id} p={4} bg="surface" border="1px solid #E5E3DD" borderRadius="md">
             <Text fontWeight="600">{job.title}</Text>
             {job.is_featured ? (
-              <Badge colorScheme="brand" mt={1}>Featured until {job.featured_until}</Badge>
+              <Badge colorPalette="brand" mt={1}>Featured until {job.featured_until}</Badge>
             ) : (
-              <Button size="sm" mt={2} colorScheme="brand" onClick={() => promote(job.id)}>
+              <Button size="sm" mt={2} colorPalette="brand" onClick={() => promote(job.id)}>
                 Feature this listing — $49
               </Button>
             )}
