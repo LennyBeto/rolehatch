@@ -1,12 +1,14 @@
 # backend/app/api/routes/promote.py
 import stripe
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from sqlalchemy.orm import Session
-from fastapi import Depends
+from sqlalchemy import func
 from datetime import datetime, timedelta, timezone
+
 from app.core.config import settings
+from app.core.security import get_current_user
 from app.db.session import get_db
-from app.models.job import Job
+from app.models.job import Job, Company
 
 stripe.api_key = settings.stripe_secret_key
 router = APIRouter()
@@ -14,11 +16,29 @@ router = APIRouter()
 FEATURE_PRICE_CENTS = 4900  # $49 for 14 days — adjust to your pricing
 FEATURE_DAYS = 14
 
+
+def verify_employer_owns_job(db: Session, user: dict, job: Job) -> bool:
+    """Confirm the signed-in user's email domain matches the job's company domain."""
+    company = db.query(Company).filter_by(id=job.company_id).first()
+    if not company or not company.domain:
+        return False
+    user_email = user.get("email", "")
+    user_domain = user_email.split("@")[-1].lower()
+    return user_domain == company.domain.lower()
+
+
 @router.post("/checkout/{job_id}")
-def create_checkout(job_id: str, db: Session = Depends(get_db)):
+def create_checkout(job_id: str, user=Depends(get_current_user), db: Session = Depends(get_db)):
     job = db.query(Job).filter_by(id=job_id).first()
     if not job:
         raise HTTPException(404, "Job not found")
+
+    if not verify_employer_owns_job(db, user, job):
+        raise HTTPException(
+            403,
+            "You can only promote listings from a company where your sign-in email "
+            "matches the company's verified domain.",
+        )
 
     session = stripe.checkout.Session.create(
         mode="payment",
@@ -30,7 +50,7 @@ def create_checkout(job_id: str, db: Session = Depends(get_db)):
             },
             "quantity": 1,
         }],
-        metadata={"job_id": str(job.id)},  # used by the webhook to know what to update
+        metadata={"job_id": str(job.id), "verified_by": user["sub"]},
         success_url=f"{settings.frontend_url}/promote/success",
         cancel_url=f"{settings.frontend_url}/promote/cancel",
     )
@@ -57,8 +77,10 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 
     return {"received": True}
 
+
 @router.get("/my-jobs")
 def my_jobs(user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Return listings belonging to the signed-in user's verified company domain."""
     user_domain = user.get("email", "").split("@")[-1].lower()
     company = db.query(Company).filter(func.lower(Company.domain) == user_domain).first()
     if not company:
