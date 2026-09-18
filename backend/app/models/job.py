@@ -15,12 +15,13 @@ class Company(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     domain: Mapped[str | None] = mapped_column(String(255), unique=True)
     board_token: Mapped[str | None] = mapped_column(String(255))
+    source_platform: Mapped[str | None] = mapped_column(String(30))  # "greenhouse"/"lever"/"workday"/"bamboohr"
     industry: Mapped[str | None] = mapped_column(String(120))
-    is_active: Mapped[bool] = mapped_column(default=True)   # ← added — sync_all_companies depends on this
+    is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     jobs: Mapped[list["Job"]] = relationship(back_populates="company", cascade="all, delete-orphan")
-
+    __tablename__ = "companies"
 
 class Job(Base):
     __tablename__ = "jobs"

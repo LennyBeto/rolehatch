@@ -15,30 +15,22 @@ logger = logging.getLogger("rolehatch.pipeline")
 SCRAPERS = {
     "greenhouse": lambda c: GreenhouseScraper().scrape(c.board_token),
     "lever": lambda c: LeverScraper().scrape(c.board_token),
-    "workday": lambda c: WorkdayScraper().scrape(*c.board_token.split(":")),  # "tenant:wd_number:site"
+    "workday": lambda c: WorkdayScraper().scrape(*(c.board_token.split(":") + [None, None, None])[:3]),
     "bamboohr": lambda c: BambooHRScraper().scrape(c.board_token),
 }
 
 async def sync_company(db: Session, company: Company):
-    """Fetch latest postings for one company and upsert into Postgres."""
     scrape_fn = SCRAPERS.get(company.source_platform)
-
     if not scrape_fn:
-        logger.warning(f"No scraper for {company.name} ({company.source_platform})")
-        return
+        raise ValueError(f"No scraper registered for source_platform={company.source_platform!r}")
 
-    try:
-        raw_jobs = await scrape_fn(company)
-    except Exception as e:
-        logger.error(f"Scrape failed for {company.name}: {e}")
-        return
+    raw_jobs = await scrape_fn(company)  # let real exceptions bubble up to internal.py's catch
 
     seen_ids = []
     for j in raw_jobs:
-        external_id = j["url"]  # stable per-posting URL across all four sources
+        external_id = j["url"]
         seen_ids.append(external_id)
 
-        # Fast pre-check in Redis avoids hammering Postgres on unchanged postings
         redis_key = f"seen:{company.source_platform}:{external_id}"
         if redis.get(redis_key):
             continue
@@ -57,9 +49,8 @@ async def sync_company(db: Session, company: Company):
                   "is_active": True, "scraped_at": func.now()},
         )
         db.execute(stmt)
-        redis.set(redis_key, "1", ex=86400)  # re-check at most once/day per posting
+        redis.set(redis_key, "1", ex=86400)
 
-    # Anything not seen in this run for this company is stale → soft-deactivate
     db.query(Job).filter(
         Job.company_id == company.id,
         Job.external_id.notin_(seen_ids),
