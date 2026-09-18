@@ -1,0 +1,7 @@
+# backend/seed_data/companies.csv
+name,domain,board_token,source_platform,industry
+Figma,figma.com,figma,greenhouse,Design Software
+Stripe,stripe.com,stripe,greenhouse,Fintech
+Airbnb,airbnb.com,airbnb,greenhouse,Travel
+Eventbrite,eventbrite.com,eventbrite,lever,Events
+Netflix,netflix.com,netflix,lever,Streaming
