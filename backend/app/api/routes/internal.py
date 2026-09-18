@@ -9,6 +9,8 @@ from app.core.config import settings
 router = APIRouter()
 
 def verify_scheduler_secret(x_scheduler_secret: str = Header(...)):
+    print(f"DEBUG received: {repr(x_scheduler_secret)}")
+    print(f"DEBUG expected: {repr(settings.scheduler_secret)}")
     if x_scheduler_secret != settings.scheduler_secret:
         raise HTTPException(403, "Forbidden")
 
