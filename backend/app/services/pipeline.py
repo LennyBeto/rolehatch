@@ -10,7 +10,7 @@ from app.services.scrapers.workday import WorkdayScraper
 from app.services.scrapers.bamboohr import BambooHRScraper
 import logging
 
-logger = logging.getLogger("rolehatch.pipeline")
+logger = logging.getLogger("perchrole.pipeline")
 
 SCRAPERS = {
     "greenhouse": lambda c: GreenhouseScraper().scrape(c.board_token),
