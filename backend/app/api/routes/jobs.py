@@ -62,8 +62,16 @@ def search_jobs(
 
     offset = (page - 1) * PAGE_SIZE
     jobs = base_query.offset(offset).limit(PAGE_SIZE).all()
+
+    now = datetime.now(timezone.utc)
     results = {
-        "jobs": [JobOut.model_validate(j).model_dump(mode="json") for j in jobs],
+        "jobs": [
+            {
+                **JobOut.model_validate(j).model_dump(mode="json"),
+                "is_featured": bool(j.featured_until and j.featured_until > now),
+            }
+            for j in jobs
+        ],
         "total": total,
         "page": page,
         "page_size": PAGE_SIZE,
