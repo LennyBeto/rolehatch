@@ -2,15 +2,19 @@
 "use client";
 import { Box, Input, Flex } from "@chakra-ui/react";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function SearchBar() {
-  const [query, setQuery] = useState("");
+  const searchParams = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get("title") ?? "");
   const router = useRouter();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    router.push(`/?title=${encodeURIComponent(query)}`);
+    const params = new URLSearchParams(searchParams.toString());
+    if (query) params.set("title", query);
+    else params.delete("title");
+    router.push(`/?${params.toString()}`);
   };
 
   return (
