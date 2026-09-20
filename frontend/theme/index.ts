@@ -2,9 +2,6 @@
 import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
 
 const config = defineConfig({
-  globalCss: {
-    body: { bg: "#F6F5F1", color: "#1F2A24" },
-  },
   theme: {
     tokens: {
       colors: {
@@ -14,16 +11,17 @@ const config = defineConfig({
           600: { value: "#26402F" },
           700: { value: "#1D3025" },
         },
-        background: { value: "#F6F5F1" },
-        surface: { value: "#FFFFFF" },
       },
     },
     semanticTokens: {
       colors: {
+        background: { value: { base: "#F6F5F1", _dark: "#0f1210" } },
+        surface: { value: { base: "#FFFFFF", _dark: "#1a1e1c" } },
+        text: { value: { base: "#1F2A24", _dark: "#EDEDED" } },
         brand: {
           solid: { value: "{colors.brand.500}" },
           contrast: { value: "white" },
-          fg: { value: "{colors.brand.700}" },
+          fg: { value: { base: "{colors.brand.700}", _dark: "{colors.brand.50}" } },
           muted: { value: "{colors.brand.50}" },
         },
       },
