@@ -7,7 +7,7 @@ from app.services.pipeline import sync_company
 from app.core.config import settings
 import logging
 
-logger = logging.getLogger("rolehatch.internal")
+logger = logging.getLogger("perchrole.internal")
 router = APIRouter()
 
 
