@@ -1,6 +1,8 @@
 // frontend/components/JobList.tsx
 "use client";
-import { Box, Heading, Text, Badge, Stack, Button, Spinner, Center, HStack } from "@chakra-ui/react";
+import {
+  Box, Heading, Text, Badge, Stack, Button, Spinner, Center, HStack, Flex,
+} from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toaster } from "@/components/ui/toaster";
@@ -8,7 +10,7 @@ import { toaster } from "@/components/ui/toaster";
 type Job = {
   id: string; title: string; location: string | null;
   remote_type: string | null; salary_min: number | null; salary_max: number | null;
-  source: string; source_url: string;
+  source: string; source_url: string; is_featured: boolean;
 };
 
 type SearchResponse = {
@@ -52,19 +54,11 @@ export default function JobList() {
   };
 
   if (loading) {
-    return (
-      <Center py={20}>
-        <Spinner size="lg" color="brand.500" />
-      </Center>
-    );
+    return <Center py={20}><Spinner size="lg" color="brand.500" /></Center>;
   }
 
   if (!data || data.jobs.length === 0) {
-    return (
-      <Center py={20}>
-        <Text color="gray.500">No jobs match your filters.</Text>
-      </Center>
-    );
+    return <Center py={20}><Text color="gray.500">No jobs match your filters.</Text></Center>;
   }
 
   return (
@@ -76,20 +70,39 @@ export default function JobList() {
           p={5}
           borderRadius="lg"
           border="1px solid #E5E3DD"
+          position="relative"
           transition="box-shadow 0.15s ease, transform 0.15s ease"
           _hover={{ boxShadow: "0 4px 16px rgba(0,0,0,0.06)", transform: "translateY(-1px)" }}
         >
-          <Heading size="md" color="text" mb={1}>{job.title}</Heading>
-          <Text color="gray.600" fontSize="sm" mb={2}>{job.location}</Text>
-          {job.remote_type && (
-            <Badge colorPalette="brand" variant="subtle" mr={2}>{job.remote_type}</Badge>
+          {job.is_featured && (
+            <Badge
+              position="absolute" top={4} right={5}
+              colorPalette="orange" variant="solid" borderRadius="full" px={3}
+            >
+              FEATURED
+            </Badge>
           )}
-          {job.salary_min && (
-            <Text as="span" fontSize="sm" color="gray.700">
-              ${job.salary_min}k–${job.salary_max}k/yr
-            </Text>
-          )}
-          <Box mt={3}>
+
+          <Flex justify="space-between" align="flex-start" pr={job.is_featured ? "90px" : 0}>
+            <Box>
+              <Heading size="md" color="text" mb={1}>{job.title}</Heading>
+              <Text color="gray.600" fontSize="sm">{job.location}</Text>
+            </Box>
+            {job.salary_min && (
+              <Text fontSize="sm" fontWeight="600" color="text" whiteSpace="nowrap">
+                ${job.salary_min}k – ${job.salary_max}k
+              </Text>
+            )}
+          </Flex>
+
+          <HStack gap={2} mt={3} flexWrap="wrap">
+            {job.remote_type && (
+              <Badge colorPalette="brand" variant="subtle">{job.remote_type}</Badge>
+            )}
+            <Badge variant="outline" textTransform="capitalize">{job.source}</Badge>
+          </HStack>
+
+          <Box mt={4}>
             <Button
               as="a" href={job.source_url} target="_blank" rel="noopener noreferrer"
               size="sm" colorPalette="brand"
@@ -102,21 +115,15 @@ export default function JobList() {
 
       {data.total_pages > 1 && (
         <HStack justify="center" pt={4} gap={2}>
-          <Button
-            size="sm" variant="outline" colorPalette="brand"
-            disabled={currentPage <= 1}
-            onClick={() => goToPage(currentPage - 1)}
-          >
+          <Button size="sm" variant="outline" colorPalette="brand"
+            disabled={currentPage <= 1} onClick={() => goToPage(currentPage - 1)}>
             Previous
           </Button>
           <Text fontSize="sm" color="gray.600" px={2}>
             Page {data.page} of {data.total_pages}
           </Text>
-          <Button
-            size="sm" variant="outline" colorPalette="brand"
-            disabled={currentPage >= data.total_pages}
-            onClick={() => goToPage(currentPage + 1)}
-          >
+          <Button size="sm" variant="outline" colorPalette="brand"
+            disabled={currentPage >= data.total_pages} onClick={() => goToPage(currentPage + 1)}>
             Next
           </Button>
         </HStack>

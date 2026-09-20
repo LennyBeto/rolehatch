@@ -15,4 +15,5 @@ class JobOut(BaseModel):
     source: str
     source_url: str
     is_active: bool
+    is_featured: bool = False
     posted_at: datetime | None
