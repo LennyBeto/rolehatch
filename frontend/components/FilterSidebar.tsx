@@ -14,7 +14,7 @@ export default function FilterSidebar() {
     <Box bg="surface" p={4} borderRadius="md" border="1px solid #E5E3DD">
       <Heading size="sm" mb={3}>Environment</Heading>
       <CheckboxGroup colorPalette="brand">
-        <Stack spacing={2} mb={5}>
+        <Stack gap={2} mb={5}>
           {REMOTE_TYPES.map((type) => (
             <Checkbox.Root key={type} value={type.toLowerCase()}>
               <Checkbox.HiddenInput />

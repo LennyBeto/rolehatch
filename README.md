@@ -1,4 +1,4 @@
-# RoleHatch
+# PerchRole
 
 A free-for-job-seekers job search platform — aggregating listings directly from company career pages (Greenhouse, Lever, Workday, BambooHR) with fast, filterable search, save/track tools, and a promoted-listings model for employers.
 
@@ -30,7 +30,7 @@ A free-for-job-seekers job search platform — aggregating listings directly fro
 
 ## Overview
 
-RoleHatch solves the two-sided problem every job board has: job seekers want fresh, real listings without noise, and employers want visibility without paying agency fees. RoleHatch pulls postings directly from the ATS platforms companies already use — no manual re-posting — and keeps the core search experience **100% free for job seekers**, monetizing instead through **promoted listings** paid for by employers.
+PerchRole solves the two-sided problem every job board has: job seekers want fresh, real listings without noise, and employers want visibility without paying agency fees. PerchRole pulls postings directly from the ATS platforms companies already use — no manual re-posting — and keeps the core search experience **100% free for job seekers**, monetizing instead through **promoted listings** paid for by employers.
 
 **Core features:**
 - Multi-source job aggregation (Greenhouse, Lever, Workday, BambooHR)

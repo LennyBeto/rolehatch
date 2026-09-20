@@ -6,7 +6,6 @@ from pathlib import Path
 from app.db.session import SessionLocal
 from app.models.job import Company
 
-
 def seed_from_csv(path: str | None = None):
     if path is None:
         path = Path(__file__).resolve().parents[1] / "seed_data" / "companies.csv"

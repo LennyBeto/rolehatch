@@ -6,6 +6,7 @@ import { saveJob, markApplied, hideJob } from "@/lib/api";
 import { useState } from "react";
 import SignInModal from "./SignInModal";
 
+
 export default function JobActions({ jobId }: { jobId: string }) {
   const { user } = useAuth();
   const [modalOpen, setModalOpen] = useState(false);
