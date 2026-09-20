@@ -2,6 +2,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from dateutil import parser as date_parser
 from app.models.job import Job, Company
 from app.core.cache import redis
 from app.services.scrapers.greenhouse import GreenhouseScraper
@@ -19,6 +20,16 @@ SCRAPERS = {
     "bamboohr": lambda c: BambooHRScraper().scrape(c.board_token),
 }
 
+
+def _parse_posted_at(raw_value: str | None):
+    if not raw_value:
+        return None
+    try:
+        return date_parser.isoparse(raw_value)
+    except (ValueError, TypeError):
+        return None
+
+
 async def sync_company(db: Session, company: Company):
     scrape_fn = SCRAPERS.get(company.source_platform)
     if not scrape_fn:
@@ -35,6 +46,8 @@ async def sync_company(db: Session, company: Company):
         if redis.get(redis_key):
             continue
 
+        posted_at = _parse_posted_at(j.get("posted_at"))
+
         stmt = pg_insert(Job).values(
             company_id=company.id,
             title=j["title"],
@@ -43,10 +56,16 @@ async def sync_company(db: Session, company: Company):
             source_url=j["url"],
             external_id=external_id,
             is_active=True,
+            posted_at=posted_at,
         ).on_conflict_do_update(
             index_elements=["source", "external_id"],
-            set_={"title": j["title"], "location": j.get("location"),
-                  "is_active": True, "scraped_at": func.now()},
+            set_={
+                "title": j["title"],
+                "location": j.get("location"),
+                "is_active": True,
+                "scraped_at": func.now(),
+                "posted_at": posted_at,
+            },
         )
         db.execute(stmt)
         redis.set(redis_key, "1", ex=86400)
