@@ -2,7 +2,7 @@
 import httpx
 
 class BaseScraper:
-    user_agent = "RoleHatchBot/1.0 (+https://rolehatch.com/bot)"
+    user_agent = "PerchRoleBot/1.0 (+https://perchrole.com/bot)"
 
     async def fetch(self, url: str) -> dict:
         async with httpx.AsyncClient(headers={"User-Agent": self.user_agent}, timeout=15) as client:
