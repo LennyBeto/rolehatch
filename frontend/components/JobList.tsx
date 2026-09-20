@@ -1,17 +1,12 @@
 // frontend/components/JobList.tsx
 "use client";
-import {
-  Box, Heading, Text, Badge, Stack, Button, Spinner, Center, HStack, Flex,
-} from "@chakra-ui/react";
+import { Box, Heading, Text, Stack, Spinner, Center, HStack, Button } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toaster } from "@/components/ui/toaster";
+import JobCard from "./JobCard";
 
-type Job = {
-  id: string; title: string; location: string | null;
-  remote_type: string | null; salary_min: number | null; salary_max: number | null;
-  source: string; source_url: string; is_featured: boolean;
-};
+type Job = Parameters<typeof JobCard>[0]["job"];
 
 type SearchResponse = {
   jobs: Job[]; total: number; page: number; page_size: number; total_pages: number;
@@ -31,10 +26,12 @@ export default function JobList() {
     const title = searchParams.get("title");
     const remoteType = searchParams.get("remote_type");
     const salaryMin = searchParams.get("salary_min");
+    const location = searchParams.get("location");
 
     if (title) params.set("title", title);
     if (remoteType) params.set("remote_type", remoteType);
     if (salaryMin) params.set("salary_min", salaryMin);
+    if (location) params.set("location", location);
     params.set("page", String(currentPage));
 
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/jobs/search?${params.toString()}`)
@@ -53,77 +50,45 @@ export default function JobList() {
     router.push(`/?${params.toString()}`);
   };
 
-  if (loading) {
-    return <Center py={20}><Spinner size="lg" color="brand.500" /></Center>;
-  }
-
+  if (loading) return <Center py={20}><Spinner size="lg" color="brand.500" /></Center>;
   if (!data || data.jobs.length === 0) {
     return <Center py={20}><Text color="gray.500">No jobs match your filters.</Text></Center>;
   }
 
+  const featured = data.jobs.filter((j) => j.is_featured);
+  const regular = data.jobs.filter((j) => !j.is_featured);
+
   return (
-    <Stack gap={4}>
-      {data.jobs.map((job) => (
-        <Box
-          key={job.id}
-          bg="surface"
-          p={5}
-          borderRadius="lg"
-          border="1px solid #E5E3DD"
-          position="relative"
-          transition="box-shadow 0.15s ease, transform 0.15s ease"
-          _hover={{ boxShadow: "0 4px 16px rgba(0,0,0,0.06)", transform: "translateY(-1px)" }}
-        >
-          {job.is_featured && (
-            <Badge
-              position="absolute" top={4} right={5}
-              colorPalette="orange" variant="solid" borderRadius="full" px={3}
-            >
-              FEATURED
-            </Badge>
-          )}
-
-          <Flex justify="space-between" align="flex-start" pr={job.is_featured ? "90px" : 0}>
-            <Box>
-              <Heading size="md" color="text" mb={1}>{job.title}</Heading>
-              <Text color="gray.600" fontSize="sm">{job.location}</Text>
-            </Box>
-            {job.salary_min && (
-              <Text fontSize="sm" fontWeight="600" color="text" whiteSpace="nowrap">
-                ${job.salary_min}k – ${job.salary_max}k
-              </Text>
-            )}
-          </Flex>
-
-          <HStack gap={2} mt={3} flexWrap="wrap">
-            {job.remote_type && (
-              <Badge colorPalette="brand" variant="subtle">{job.remote_type}</Badge>
-            )}
-            <Badge variant="outline" textTransform="capitalize">{job.source}</Badge>
-          </HStack>
-
-          <Box mt={4}>
-            <Button
-              as="a" href={job.source_url} target="_blank" rel="noopener noreferrer"
-              size="sm" colorPalette="brand"
-            >
-              View Job
-            </Button>
-          </Box>
+    <Stack gap={6}>
+      {featured.length > 0 && (
+        <Box>
+          <Heading size="sm" color="gray.500" mb={3} textTransform="uppercase" letterSpacing="wide">
+            Featured Roles
+          </Heading>
+          <Stack gap={4}>
+            {featured.map((job) => <JobCard key={job.id} job={job} />)}
+          </Stack>
         </Box>
-      ))}
+      )}
+
+      <Box>
+        {featured.length > 0 && (
+          <Heading size="sm" color="gray.500" mb={3} textTransform="uppercase" letterSpacing="wide">
+            All Jobs
+          </Heading>
+        )}
+        <Stack gap={4}>
+          {regular.map((job) => <JobCard key={job.id} job={job} />)}
+        </Stack>
+      </Box>
 
       {data.total_pages > 1 && (
         <HStack justify="center" pt={4} gap={2}>
-          <Button size="sm" variant="outline" colorPalette="brand"
-            disabled={currentPage <= 1} onClick={() => goToPage(currentPage - 1)}>
+          <Button size="sm" variant="outline" colorPalette="brand" disabled={currentPage <= 1} onClick={() => goToPage(currentPage - 1)}>
             Previous
           </Button>
-          <Text fontSize="sm" color="gray.600" px={2}>
-            Page {data.page} of {data.total_pages}
-          </Text>
-          <Button size="sm" variant="outline" colorPalette="brand"
-            disabled={currentPage >= data.total_pages} onClick={() => goToPage(currentPage + 1)}>
+          <Text fontSize="sm" color="gray.600" px={2}>Page {data.page} of {data.total_pages}</Text>
+          <Button size="sm" variant="outline" colorPalette="brand" disabled={currentPage >= data.total_pages} onClick={() => goToPage(currentPage + 1)}>
             Next
           </Button>
         </HStack>

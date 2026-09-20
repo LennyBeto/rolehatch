@@ -10,6 +10,7 @@ class JobOut(BaseModel):
     title: str
     location: str | None
     remote_type: str | None
+    commitment: str | None = None
     salary_min: float | None
     salary_max: float | None
     source: str
@@ -17,3 +18,5 @@ class JobOut(BaseModel):
     is_active: bool
     is_featured: bool = False
     posted_at: datetime | None
+    company_name: str | None = None
+    company_domain: str | None = None

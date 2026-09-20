@@ -1,7 +1,7 @@
 # backend/app/api/routes/jobs.py
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, timezone
 
 from app.core.cache import cache_key, get_cached, set_cached
@@ -21,7 +21,11 @@ def build_search_query(
     salary_min: int | None,
     remote_type: str | None = None,
 ):
-    q = db.query(Job).filter(Job.is_active.is_(True))
+    q = (
+        db.query(Job)
+        .options(joinedload(Job.company))  # avoids N+1 queries when reading job.company below
+        .filter(Job.is_active.is_(True))
+    )
     if location:
         q = q.filter(Job.location.ilike(f"%{location}%"))
     if title:
@@ -38,6 +42,14 @@ def build_search_query(
         else_=1,
     )
     return q.order_by(is_featured_now, Job.posted_at.desc())
+
+
+def _serialize_job(j: Job, now: datetime) -> dict:
+    data = JobOut.model_validate(j).model_dump(mode="json")
+    data["is_featured"] = bool(j.featured_until and j.featured_until > now)
+    data["company_name"] = j.company.name if j.company else None
+    data["company_domain"] = j.company.domain if j.company else None
+    return data
 
 
 @router.get("/search")
@@ -58,20 +70,14 @@ def search_jobs(
         return cached
 
     base_query = build_search_query(db, location, title, salary_min, remote_type)
-    total = base_query.order_by(None).count()  # order_by(None) avoids counting with a needless ORDER BY
+    total = base_query.order_by(None).count()
 
     offset = (page - 1) * PAGE_SIZE
     jobs = base_query.offset(offset).limit(PAGE_SIZE).all()
 
     now = datetime.now(timezone.utc)
     results = {
-        "jobs": [
-            {
-                **JobOut.model_validate(j).model_dump(mode="json"),
-                "is_featured": bool(j.featured_until and j.featured_until > now),
-            }
-            for j in jobs
-        ],
+        "jobs": [_serialize_job(j, now) for j in jobs],
         "total": total,
         "page": page,
         "page_size": PAGE_SIZE,
@@ -100,16 +106,21 @@ def get_facets(db: Session = Depends(get_db)):
     return facets
 
 
-@router.get("/{job_id}", response_model=JobOut)
+@router.get("/{job_id}")
 def get_job(job_id: str, db: Session = Depends(get_db)):
     key = f"job:{job_id}"
     if (cached := get_cached(key)) is not None:
         return cached
 
-    job = db.query(Job).filter_by(id=job_id, is_active=True).first()
+    job = (
+        db.query(Job)
+        .options(joinedload(Job.company))
+        .filter_by(id=job_id, is_active=True)
+        .first()
+    )
     if not job:
         raise HTTPException(404, "Job not found")
 
-    result = JobOut.model_validate(job).model_dump(mode="json")
+    result = _serialize_job(job, datetime.now(timezone.utc))
     set_cached(key, result, ttl_seconds=3600)
     return result
