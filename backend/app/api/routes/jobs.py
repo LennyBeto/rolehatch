@@ -12,7 +12,13 @@ from app.schemas.job import JobOut
 router = APIRouter()
 
 
-def build_search_query(db: Session, location: str | None, title: str | None, salary_min: int | None):
+def build_search_query(
+    db: Session,
+    location: str | None,
+    title: str | None,
+    salary_min: int | None,
+    remote_type: str | None = None,
+):
     q = db.query(Job).filter(Job.is_active.is_(True))
     if location:
         q = q.filter(Job.location.ilike(f"%{location}%"))
@@ -20,6 +26,10 @@ def build_search_query(db: Session, location: str | None, title: str | None, sal
         q = q.filter(Job.title.ilike(f"%{title}%"))
     if salary_min:
         q = q.filter(Job.salary_min >= salary_min)
+    if remote_type:
+        types = [t.strip() for t in remote_type.split(",") if t.strip()]
+        if types:
+            q = q.filter(Job.remote_type.in_(types))
 
     is_featured_now = case(
         (Job.featured_until.isnot(None) & (Job.featured_until > datetime.now(timezone.utc)), 0),
@@ -33,14 +43,20 @@ def search_jobs(
     location: str | None = None,
     title: str | None = None,
     salary_min: int | None = None,
+    remote_type: str | None = None,
     db: Session = Depends(get_db),
 ):
-    params = {"location": location, "title": title, "salary_min": salary_min}
+    params = {
+        "location": location,
+        "title": title,
+        "salary_min": salary_min,
+        "remote_type": remote_type,
+    }
     key = cache_key("search", params)
     if (cached := get_cached(key)) is not None:
         return cached
 
-    jobs = build_search_query(db, location, title, salary_min).limit(50).all()
+    jobs = build_search_query(db, location, title, salary_min, remote_type).limit(50).all()
     results = [JobOut.model_validate(j).model_dump(mode="json") for j in jobs]
 
     set_cached(key, results, ttl_seconds=600)  # 10 min TTL — search results
