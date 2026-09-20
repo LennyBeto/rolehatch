@@ -14,6 +14,7 @@ export default function SearchBar() {
     const params = new URLSearchParams(searchParams.toString());
     if (query) params.set("title", query);
     else params.delete("title");
+    params.delete("page");
     router.push(`/?${params.toString()}`);
   };
 

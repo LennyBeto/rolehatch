@@ -17,6 +17,7 @@ export default function FilterSidebar() {
 
   const updateParams = (updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString());
+    params.delete("page"); // any filter change invalidates the current page position
     for (const [key, value] of Object.entries(updates)) {
       if (value === null || value === "") params.delete(key);
       else params.set(key, value);
