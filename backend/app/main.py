@@ -8,7 +8,7 @@ from app.core.config import settings
 from app.api.routes import jobs, saved_jobs, promote, internal
 
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="RoleHatch API")
+app = FastAPI(title="PerchRole API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
