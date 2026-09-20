@@ -11,6 +11,8 @@ from app.schemas.job import JobOut
 
 router = APIRouter()
 
+PAGE_SIZE = 15
+
 
 def build_search_query(
     db: Session,
@@ -38,28 +40,37 @@ def build_search_query(
     return q.order_by(is_featured_now, Job.posted_at.desc())
 
 
-@router.get("/search", response_model=list[JobOut])
+@router.get("/search")
 def search_jobs(
     location: str | None = None,
     title: str | None = None,
     salary_min: int | None = None,
     remote_type: str | None = None,
+    page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
 ):
     params = {
-        "location": location,
-        "title": title,
-        "salary_min": salary_min,
-        "remote_type": remote_type,
+        "location": location, "title": title, "salary_min": salary_min,
+        "remote_type": remote_type, "page": page,
     }
     key = cache_key("search", params)
     if (cached := get_cached(key)) is not None:
         return cached
 
-    jobs = build_search_query(db, location, title, salary_min, remote_type).limit(50).all()
-    results = [JobOut.model_validate(j).model_dump(mode="json") for j in jobs]
+    base_query = build_search_query(db, location, title, salary_min, remote_type)
+    total = base_query.order_by(None).count()  # order_by(None) avoids counting with a needless ORDER BY
 
-    set_cached(key, results, ttl_seconds=600)  # 10 min TTL — search results
+    offset = (page - 1) * PAGE_SIZE
+    jobs = base_query.offset(offset).limit(PAGE_SIZE).all()
+    results = {
+        "jobs": [JobOut.model_validate(j).model_dump(mode="json") for j in jobs],
+        "total": total,
+        "page": page,
+        "page_size": PAGE_SIZE,
+        "total_pages": (total + PAGE_SIZE - 1) // PAGE_SIZE,
+    }
+
+    set_cached(key, results, ttl_seconds=600)
     return results
 
 
@@ -77,7 +88,7 @@ def get_facets(db: Session = Depends(get_db)):
     )
     facets = {"remote_type": {rt: count for rt, count in remote_counts}}
 
-    set_cached(key, facets, ttl_seconds=900)  # refreshed on a schedule, not per-request
+    set_cached(key, facets, ttl_seconds=900)
     return facets
 
 
@@ -92,5 +103,5 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "Job not found")
 
     result = JobOut.model_validate(job).model_dump(mode="json")
-    set_cached(key, result, ttl_seconds=3600)  # 1 hr — individual listings change rarely
+    set_cached(key, result, ttl_seconds=3600)
     return result
