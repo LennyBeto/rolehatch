@@ -6,6 +6,19 @@ import { ClientOnly, IconButton, Skeleton } from "@chakra-ui/react";
 import { LuMoon, LuSun } from "react-icons/lu";
 import * as React from "react";
 
+if (typeof window !== "undefined") {
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => {
+    if (
+      typeof args[0] === "string" &&
+      args[0].includes("Encountered a script tag while rendering React component")
+    ) {
+      return; // known next-themes + React 19 false positive — script runs correctly during SSR
+    }
+    originalError(...args);
+  };
+}
+
 export function ColorModeProvider(props: ThemeProviderProps) {
   return (
     <ThemeProvider
