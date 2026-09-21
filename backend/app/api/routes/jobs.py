@@ -124,3 +124,16 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
     result = _serialize_job(job, datetime.now(timezone.utc))
     set_cached(key, result, ttl_seconds=3600)
     return result
+
+@router.get("/stats")
+def get_platform_stats(db: Session = Depends(get_db)):
+    key = "stats:global"
+    if (cached := get_cached(key)) is not None:
+        return cached
+
+    total_jobs = db.query(Job).filter(Job.is_active.is_(True)).count()
+    total_companies = db.query(Company).filter(Company.is_active.is_(True)).count()
+
+    stats = {"total_jobs": total_jobs, "total_companies": total_companies}
+    set_cached(key, stats, ttl_seconds=1800)  # 30 min — doesn't need to be real-time
+    return stats
