@@ -122,7 +122,7 @@ export default function HeroSection() {
           borderRadius="full"
           px={8}
         >
-          <Link href="/dashboard">Post a Job</Link>
+          <Link href="/post-job">Post a Job</Link>
         </Button>
         <Button
           asChild

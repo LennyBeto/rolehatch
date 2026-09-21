@@ -36,8 +36,8 @@ export default function Header() {
         </Flex>
 
         <HStack gap={5} display={{ base: "none", md: "flex" }}>
-          <Text fontSize="sm" fontWeight="500" cursor="pointer">Find Jobs</Text>
-          <Text fontSize="sm" fontWeight="500" cursor="pointer">Post a Job</Text>
+          <Text as="a" href="/#listings" fontSize="sm" fontWeight="500" cursor="pointer">Find Jobs</Text>
+          <Text as="a" href="/post-job" fontSize="sm" fontWeight="500" cursor="pointer">Post a Job</Text>
           <Text fontSize="sm" fontWeight="500" cursor="pointer">Company</Text>
           <Text fontSize="sm" fontWeight="500" cursor="pointer">Blog</Text>
         </HStack>
@@ -57,6 +57,9 @@ export default function Header() {
               <Portal>
                 <Menu.Positioner>
                   <Menu.Content>
+                    <Menu.Item value="post-job" asChild>
+                      <a href="/post-job">Post a Job</a>
+                    </Menu.Item>
                     <Menu.Item value="dashboard" asChild>
                       <a href="/dashboard">Dashboard</a>
                     </Menu.Item>
