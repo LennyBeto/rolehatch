@@ -2,6 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
+from fastapi.middleware.gzip import GZipMiddleware
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
@@ -35,3 +36,4 @@ app.include_router(job_alerts.router, prefix="/api/job-alerts", tags=["job-alert
 app.include_router(companies.router, prefix="/api/companies", tags=["companies"])
 app.include_router(employer_jobs.router, prefix="/api/employer/jobs", tags=["employer-jobs"])
 app.include_router(internal.router)
+app.add_middleware(GZipMiddleware, minimum_size=1000)

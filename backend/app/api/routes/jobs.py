@@ -1,7 +1,7 @@
-# backend/app/api/routes/jobs.py — full corrected order
+# backend/app/api/routes/jobs.py
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case, func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import case, func, select
+from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
 from app.core.cache import cache_key, get_cached, set_cached
@@ -12,6 +12,10 @@ from app.schemas.job import JobOut
 router = APIRouter()
 
 PAGE_SIZE = 15
+SEARCH_CACHE_TTL = 3300   # ~55 min — just under the hourly scrape cycle
+FACETS_CACHE_TTL = 1800
+STATS_CACHE_TTL = 1800
+JOB_DETAIL_CACHE_TTL = 3600
 
 
 def build_search_query(
@@ -21,21 +25,29 @@ def build_search_query(
     salary_min: int | None,
     remote_type: str | None = None,
 ):
+    # Column-level select instead of full ORM hydration — only pulls the
+    # fields actually returned to the frontend, skipping heavier columns
+    # like Job.external_id, Job.scraped_at, Company.industry, Company.board_token.
     q = (
-        db.query(Job)
-        .options(joinedload(Job.company))
-        .filter(Job.is_active.is_(True))
+        select(
+            Job.id, Job.title, Job.location, Job.remote_type, Job.commitment,
+            Job.salary_min, Job.salary_max, Job.source, Job.source_url,
+            Job.is_active, Job.featured_until, Job.posted_at,
+            Company.name.label("company_name"), Company.domain.label("company_domain"),
+        )
+        .join(Company, Job.company_id == Company.id)
+        .where(Job.is_active.is_(True))
     )
     if location:
-        q = q.filter(Job.location.ilike(f"%{location}%"))
+        q = q.where(Job.location.ilike(f"%{location}%"))
     if title:
-        q = q.filter(Job.title.ilike(f"%{title}%"))
+        q = q.where(Job.title.ilike(f"%{title}%"))
     if salary_min:
-        q = q.filter(Job.salary_min >= salary_min)
+        q = q.where(Job.salary_min >= salary_min)
     if remote_type:
         types = [t.strip() for t in remote_type.split(",") if t.strip()]
         if types:
-            q = q.filter(Job.remote_type.in_(types))
+            q = q.where(Job.remote_type.in_(types))
 
     is_featured_now = case(
         (Job.featured_until.isnot(None) & (Job.featured_until > datetime.now(timezone.utc)), 0),
@@ -44,18 +56,30 @@ def build_search_query(
     return q.order_by(is_featured_now, Job.posted_at.desc())
 
 
-def _serialize_job(j: Job, now: datetime) -> dict:
-    data = JobOut.model_validate(j).model_dump(mode="json")
-    data["is_featured"] = bool(j.featured_until and j.featured_until > now)
-    data["company_name"] = j.company.name if j.company else None
-    data["company_domain"] = j.company.domain if j.company else None
-    return data
+def _serialize_row(row, now: datetime) -> dict:
+    m = row._mapping
+    return {
+        "id": str(m["id"]),
+        "title": m["title"],
+        "location": m["location"],
+        "remote_type": m["remote_type"],
+        "commitment": m["commitment"],
+        "salary_min": float(m["salary_min"]) if m["salary_min"] is not None else None,
+        "salary_max": float(m["salary_max"]) if m["salary_max"] is not None else None,
+        "source": m["source"],
+        "source_url": m["source_url"],
+        "is_active": m["is_active"],
+        "is_featured": bool(m["featured_until"] and m["featured_until"] > now),
+        "posted_at": m["posted_at"].isoformat() if m["posted_at"] else None,
+        "company_name": m["company_name"],
+        "company_domain": m["company_domain"],
+    }
 
 
 # ── All static/literal paths MUST come before /{job_id} ──
 # FastAPI matches routes in declaration order — /{job_id} is a catch-all
 # that will otherwise swallow /search, /facets, and /stats as if they
-# were job IDs, causing Postgres UUID-cast errors like 22P02.
+# were job IDs, causing Postgres UUID cast errors (22P02).
 
 @router.get("/search")
 def search_jobs(
@@ -75,21 +99,23 @@ def search_jobs(
         return cached
 
     base_query = build_search_query(db, location, title, salary_min, remote_type)
-    total = base_query.order_by(None).count()
+
+    count_query = select(func.count()).select_from(base_query.order_by(None).subquery())
+    total = db.execute(count_query).scalar_one()
 
     offset = (page - 1) * PAGE_SIZE
-    jobs = base_query.offset(offset).limit(PAGE_SIZE).all()
+    rows = db.execute(base_query.offset(offset).limit(PAGE_SIZE)).all()
 
     now = datetime.now(timezone.utc)
     results = {
-        "jobs": [_serialize_job(j, now) for j in jobs],
+        "jobs": [_serialize_row(r, now) for r in rows],
         "total": total,
         "page": page,
         "page_size": PAGE_SIZE,
         "total_pages": (total + PAGE_SIZE - 1) // PAGE_SIZE,
     }
 
-    set_cached(key, results, ttl_seconds=600)
+    set_cached(key, results, ttl_seconds=SEARCH_CACHE_TTL)
     return results
 
 
@@ -107,7 +133,7 @@ def get_facets(db: Session = Depends(get_db)):
     )
     facets = {"remote_type": {rt: count for rt, count in remote_counts}}
 
-    set_cached(key, facets, ttl_seconds=900)
+    set_cached(key, facets, ttl_seconds=FACETS_CACHE_TTL)
     return facets
 
 
@@ -121,7 +147,7 @@ def get_platform_stats(db: Session = Depends(get_db)):
     total_companies = db.query(Company).filter(Company.is_active.is_(True)).count()
 
     stats = {"total_jobs": total_jobs, "total_companies": total_companies}
-    set_cached(key, stats, ttl_seconds=1800)
+    set_cached(key, stats, ttl_seconds=STATS_CACHE_TTL)
     return stats
 
 
@@ -132,15 +158,27 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
     if (cached := get_cached(key)) is not None:
         return cached
 
-    job = (
-        db.query(Job)
-        .options(joinedload(Job.company))
-        .filter_by(id=job_id, is_active=True)
-        .first()
-    )
+    job = db.query(Job).filter_by(id=job_id, is_active=True).first()
     if not job:
         raise HTTPException(404, "Job not found")
 
-    result = _serialize_job(job, datetime.now(timezone.utc))
-    set_cached(key, result, ttl_seconds=3600)
+    company = job.company
+    now = datetime.now(timezone.utc)
+    result = {
+        "id": str(job.id),
+        "title": job.title,
+        "location": job.location,
+        "remote_type": job.remote_type,
+        "commitment": job.commitment,
+        "salary_min": float(job.salary_min) if job.salary_min is not None else None,
+        "salary_max": float(job.salary_max) if job.salary_max is not None else None,
+        "source": job.source,
+        "source_url": job.source_url,
+        "is_active": job.is_active,
+        "is_featured": bool(job.featured_until and job.featured_until > now),
+        "posted_at": job.posted_at.isoformat() if job.posted_at else None,
+        "company_name": company.name if company else None,
+        "company_domain": company.domain if company else None,
+    }
+    set_cached(key, result, ttl_seconds=JOB_DETAIL_CACHE_TTL)
     return result
