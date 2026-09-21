@@ -1,10 +1,11 @@
 // frontend/components/JobList.tsx
 "use client";
-import { Box, Heading, Text, Stack, Spinner, Center, HStack, Button } from "@chakra-ui/react";
+import { Box, Heading, Text, Stack, Spinner, Center } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toaster } from "@/components/ui/toaster";
 import JobCard from "./JobCard";
+import PaginationControls from "./PaginationControls";
 
 type Job = Parameters<typeof JobCard>[0]["job"];
 
@@ -47,7 +48,7 @@ export default function JobList() {
   const goToPage = (page: number) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", String(page));
-    router.push(`/?${params.toString()}`);
+    router.push(`/?${params.toString()}#listings`);
   };
 
   if (loading) return <Center py={20}><Spinner size="lg" color="brand.500" /></Center>;
@@ -82,17 +83,11 @@ export default function JobList() {
         </Stack>
       </Box>
 
-      {data.total_pages > 1 && (
-        <HStack justify="center" pt={4} gap={2}>
-          <Button size="sm" variant="outline" colorPalette="brand" disabled={currentPage <= 1} onClick={() => goToPage(currentPage - 1)}>
-            Previous
-          </Button>
-          <Text fontSize="sm" color="gray.600" px={2}>Page {data.page} of {data.total_pages}</Text>
-          <Button size="sm" variant="outline" colorPalette="brand" disabled={currentPage >= data.total_pages} onClick={() => goToPage(currentPage + 1)}>
-            Next
-          </Button>
-        </HStack>
-      )}
+      <PaginationControls
+        currentPage={data.page}
+        totalPages={data.total_pages}
+        onPageChange={goToPage}
+      />
     </Stack>
   );
 }
