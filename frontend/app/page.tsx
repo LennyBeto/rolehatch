@@ -6,6 +6,7 @@ import QuickFilterChips from "@/components/QuickFilterChips";
 import FilterSidebar from "@/components/FilterSidebar";
 import JobList from "@/components/JobList";
 import JobAlertForm from "@/components/JobAlertForm";
+import EmployerPricingPreview from "@/components/EmployerPricingPreview";
 
 export default function HomePage() {
   return (
@@ -24,6 +25,7 @@ export default function HomePage() {
         </Box>
       </Flex>
       <JobAlertForm />
+      <EmployerPricingPreview />
     </Box>
   );
 }
