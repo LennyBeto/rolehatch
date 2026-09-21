@@ -1,4 +1,5 @@
 // frontend/components/EmployerPricingPreview.tsx
+"use client";
 import { Box, Heading, Text, SimpleGrid, Stack, HStack, Button, Icon } from "@chakra-ui/react";
 import { LuCheck } from "react-icons/lu";
 import Link from "next/link";
