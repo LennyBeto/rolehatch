@@ -42,13 +42,14 @@ export default function PostJobPage() {
   const [applyUrl, setApplyUrl] = useState("");
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (loading || user) return;
+
+    const timeoutId = setTimeout(() => {
       toaster.create({ title: "Please sign in to post a job", type: "info" });
-      const timeoutId = setTimeout(() => {
-        router.push("/");
-      }, 0);
-      return () => clearTimeout(timeoutId);
-    }
+      router.push("/");
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
   }, [loading, user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
