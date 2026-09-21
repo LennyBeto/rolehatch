@@ -1,4 +1,4 @@
-# backend/app/api/routes/jobs.py
+# backend/app/api/routes/jobs.py — full corrected order
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload
@@ -23,7 +23,7 @@ def build_search_query(
 ):
     q = (
         db.query(Job)
-        .options(joinedload(Job.company))  # avoids N+1 queries when reading job.company below
+        .options(joinedload(Job.company))
         .filter(Job.is_active.is_(True))
     )
     if location:
@@ -51,6 +51,11 @@ def _serialize_job(j: Job, now: datetime) -> dict:
     data["company_domain"] = j.company.domain if j.company else None
     return data
 
+
+# ── All static/literal paths MUST come before /{job_id} ──
+# FastAPI matches routes in declaration order — /{job_id} is a catch-all
+# that will otherwise swallow /search, /facets, and /stats as if they
+# were job IDs, causing Postgres UUID-cast errors like 22P02.
 
 @router.get("/search")
 def search_jobs(
@@ -106,6 +111,21 @@ def get_facets(db: Session = Depends(get_db)):
     return facets
 
 
+@router.get("/stats")
+def get_platform_stats(db: Session = Depends(get_db)):
+    key = "stats:global"
+    if (cached := get_cached(key)) is not None:
+        return cached
+
+    total_jobs = db.query(Job).filter(Job.is_active.is_(True)).count()
+    total_companies = db.query(Company).filter(Company.is_active.is_(True)).count()
+
+    stats = {"total_jobs": total_jobs, "total_companies": total_companies}
+    set_cached(key, stats, ttl_seconds=1800)
+    return stats
+
+
+# ── Dynamic path last ──
 @router.get("/{job_id}")
 def get_job(job_id: str, db: Session = Depends(get_db)):
     key = f"job:{job_id}"
@@ -124,16 +144,3 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
     result = _serialize_job(job, datetime.now(timezone.utc))
     set_cached(key, result, ttl_seconds=3600)
     return result
-
-@router.get("/stats")
-def get_platform_stats(db: Session = Depends(get_db)):
-    key = "stats:global"
-    if (cached := get_cached(key)) is not None:
-        return cached
-
-    total_jobs = db.query(Job).filter(Job.is_active.is_(True)).count()
-    total_companies = db.query(Company).filter(Company.is_active.is_(True)).count()
-
-    stats = {"total_jobs": total_jobs, "total_companies": total_companies}
-    set_cached(key, stats, ttl_seconds=1800)  # 30 min — doesn't need to be real-time
-    return stats
