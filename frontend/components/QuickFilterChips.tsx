@@ -4,14 +4,17 @@ import { Wrap, Button } from "@chakra-ui/react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const CHIPS = [
+  { label: "AI/ML", type: "title", value: "ai-ml" },
   { label: "Backend", type: "title", value: "backend" },
   { label: "Frontend", type: "title", value: "frontend" },
+  { label: "UI/UX", type: "title", value: "ui-ux" },
   { label: "Full-Stack", type: "title", value: "full-stack" },
   { label: "DevOps", type: "title", value: "devops" },
+  { label: "SRE", type: "title", value: "sre" },
   { label: "Data Analytics", type: "title", value: "data-analytics" },
   { label: "Data Science", type: "title", value: "data-science" },
-  { label: "100% Remote", type: "remote_type", value: "remote" },
-  { label: "Hybrid", type: "remote_type", value: "hybrid" },
+  { label: "Product Manager", type: "title", value: "product-manager" },
+  { label: "Cybersecurity", type: "title", value: "cybersecurity" },
 ];
 
 export default function QuickFilterChips() {
