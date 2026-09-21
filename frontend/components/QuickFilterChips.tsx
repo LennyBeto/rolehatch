@@ -6,7 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 const CHIPS = [
   { label: "Backend", type: "title", value: "backend" },
   { label: "Frontend", type: "title", value: "frontend" },
+  { label: "Full-Stack", type: "title", value: "full-stack" },
   { label: "DevOps", type: "title", value: "devops" },
+  { label: "Data Analytics", type: "title", value: "data-analytics" },
+  { label: "Data Science", type: "title", value: "data-science" },
   { label: "100% Remote", type: "remote_type", value: "remote" },
   { label: "Hybrid", type: "remote_type", value: "hybrid" },
 ];
