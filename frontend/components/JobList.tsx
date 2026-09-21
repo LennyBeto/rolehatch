@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toaster } from "@/components/ui/toaster";
 import JobCard from "./JobCard";
 import PaginationControls from "./PaginationControls";
+import JobListSkeleton from "./JobListSkeleton";
 
 type Job = Parameters<typeof JobCard>[0]["job"];
 
@@ -51,8 +52,9 @@ export default function JobList() {
     router.push(`/?${params.toString()}#listings`);
   };
 
-  if (loading) return <Center py={20}><Spinner size="lg" color="brand.500" /></Center>;
-  if (!data || data.jobs.length === 0) {
+ // if (loading) return <Center py={20}><Spinner size="lg" color="brand.500" /></Center>;
+ if (loading) return <JobListSkeleton />; 
+ if (!data || data.jobs.length === 0) {
     return <Center py={20}><Text color="gray.500">No jobs match your filters.</Text></Center>;
   }
 

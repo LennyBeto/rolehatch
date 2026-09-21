@@ -4,6 +4,7 @@ import {
   Box, Heading, CheckboxGroup, Checkbox, VStack, Slider, Text,
 } from "@chakra-ui/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useDebouncedCallback } from "@/lib/useDebouncedCallback";
 
 const REMOTE_TYPES = ["Remote", "Hybrid", "Onsite", "Field"];
 
@@ -33,6 +34,10 @@ export default function FilterSidebar() {
     updateParams({ salary_min: String(value[0]), salary_max: String(value[1]) });
   };
 
+  const debouncedSalaryUpdate = useDebouncedCallback((value: number[]) => {
+  updateParams({ salary_min: String(value[0]), salary_max: String(value[1]) });
+}, 400);
+
   return (
     <Box bg="surface" p={4} borderRadius="md" border="1px solid #E5E3DD">
       <Heading size="sm" mb={3}>Environment</Heading>
@@ -59,7 +64,7 @@ export default function FilterSidebar() {
         max={300}
         step={10}
         value={[salaryMin, salaryMax]}
-        onValueChange={(e) => handleSalaryChange(e.value)}
+        onValueChange={(e) => debouncedSalaryUpdate(e.value)}
         mb={2}
       >
         <Slider.Control>
