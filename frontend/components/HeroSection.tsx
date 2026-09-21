@@ -115,25 +115,23 @@ export default function HeroSection() {
 
       <HStack justify="center" gap={4} mt={8}>
         <Button
-          as={Link}
-          href="/dashboard"
+          asChild
           variant="outline"
           colorPalette="brand"
           size="lg"
           borderRadius="full"
           px={8}
         >
-          Post a Job
+          <Link href="/dashboard">Post a Job</Link>
         </Button>
         <Button
-          as="a"
-          href="#listings"
+          asChild
           colorPalette="brand"
           size="lg"
           borderRadius="full"
           px={8}
         >
-          Browse All Jobs
+          <a href="#listings">Browse All Jobs</a>
         </Button>
       </HStack>
     </Box>

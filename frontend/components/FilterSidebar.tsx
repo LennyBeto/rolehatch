@@ -1,7 +1,7 @@
 // frontend/components/FilterSidebar.tsx
 "use client";
 import {
-  Box, Heading, CheckboxGroup, Checkbox, Stack, Slider, Text,
+  Box, Heading, CheckboxGroup, Checkbox, VStack, Slider, Text,
 } from "@chakra-ui/react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -41,7 +41,7 @@ export default function FilterSidebar() {
         value={selectedRemoteTypes}
         onValueChange={handleRemoteTypeChange}
       >
-        <Stack gap={2} mb={5}>
+        <VStack gap={2} mb={5} align="stretch">
           {REMOTE_TYPES.map((type) => (
             <Checkbox.Root key={type} value={type.toLowerCase()}>
               <Checkbox.HiddenInput />
@@ -49,7 +49,7 @@ export default function FilterSidebar() {
               <Checkbox.Label>{type}</Checkbox.Label>
             </Checkbox.Root>
           ))}
-        </Stack>
+        </VStack>
       </CheckboxGroup>
 
       <Heading size="sm" mb={3}>Salary ($k/yr)</Heading>

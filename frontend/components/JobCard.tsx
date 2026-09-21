@@ -59,8 +59,10 @@ export default function JobCard({ job }: { job: Job }) {
           </HStack>
 
           <Box mt={4}>
-            <Button as="a" href={job.source_url} target="_blank" rel="noopener noreferrer" size="sm" colorPalette="brand">
-              View Job
+            <Button asChild size="sm" colorPalette="brand">
+              <a href={job.source_url} target="_blank" rel="noopener noreferrer">
+                View Job
+              </a>
             </Button>
           </Box>
         </Box>
