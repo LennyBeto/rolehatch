@@ -10,6 +10,7 @@ from alembic import context
 from app.db.base import Base
 from app.models.job import Company, Job, SavedJob  # noqa: ensures models are registered
 from app.models.job_alert import JobAlert
+from app.models.contact_message import ContactMessage
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
