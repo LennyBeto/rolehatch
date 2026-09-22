@@ -6,13 +6,18 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDebouncedCallback } from "@/lib/useDebouncedCallback";
 
-const REMOTE_TYPES = ["Remote", "Hybrid", "Onsite", "Field"];
+const REMOTE_TYPES = [
+  { label: "Remote", value: "remote" },
+  { label: "Hybrid", value: "hybrid" },
+  { label: "Onsite", value: "onsite" },
+  { label: "Field", value: "field" },
+];
 
 export default function FilterSidebar() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const selectedRemoteTypes = searchParams.get("remote_type")?.split(",").filter(Boolean) ?? [];
+  const selectedRemoteTypes = searchParams.get("remote_type")?.split(",").map((v) => v.trim().toLowerCase()).filter(Boolean) ?? [];
   const salaryMin = Number(searchParams.get("salary_min") ?? 0);
   const salaryMax = Number(searchParams.get("salary_max") ?? 200);
 
@@ -27,7 +32,8 @@ export default function FilterSidebar() {
   };
 
   const handleRemoteTypeChange = (values: string[]) => {
-    updateParams({ remote_type: values.length ? values.join(",") : null });
+    const normalized = values.map((value) => value.trim().toLowerCase()).filter(Boolean);
+    updateParams({ remote_type: normalized.length ? normalized.join(",") : null });
   };
 
   const handleSalaryChange = (value: number[]) => {
@@ -48,10 +54,10 @@ export default function FilterSidebar() {
       >
         <VStack gap={2} mb={5} align="stretch">
           {REMOTE_TYPES.map((type) => (
-            <Checkbox.Root key={type} value={type.toLowerCase()}>
+            <Checkbox.Root key={type.value} value={type.value}>
               <Checkbox.HiddenInput />
               <Checkbox.Control />
-              <Checkbox.Label>{type}</Checkbox.Label>
+              <Checkbox.Label>{type.label}</Checkbox.Label>
             </Checkbox.Root>
           ))}
         </VStack>

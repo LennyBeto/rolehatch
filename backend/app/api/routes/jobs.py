@@ -67,9 +67,9 @@ def build_search_query(
     if salary_min:
         q = q.where(Job.salary_min >= salary_min)
     if remote_type:
-        types = [t.strip() for t in remote_type.split(",") if t.strip()]
+        types = [t.strip().lower() for t in remote_type.split(",") if t.strip()]
         if types:
-            q = q.where(Job.remote_type.in_(types))
+            q = q.where(func.lower(Job.remote_type).in_(types))
 
     is_featured_now = case(
         (Job.featured_until.isnot(None) & (Job.featured_until > datetime.now(timezone.utc)), 0),
