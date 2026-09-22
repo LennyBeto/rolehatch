@@ -47,12 +47,12 @@ export default function HeroSection() {
         as="h1"
         fontSize={{ base: "2xl", md: "4xl" }}
         color="text"
-        mb={3}
+        mb={4}
         fontWeight="700"
       >
         Find Verified Remote &amp; Tech Jobs, Sourced Directly From Employers
       </Heading>
-      <Text color="gray.600" fontSize={{ base: "md", md: "lg" }} mb={8} maxW="600px" mx="auto">
+      <Text color="gray.600" fontSize={{ base: "md", md: "lg" }} mt={1} mb={8} maxW="600px" mx="auto">
         PerchRole pulls listings straight from company career pages — no reposts,
         no stale ads. Free for job seekers, always.
       </Text>
