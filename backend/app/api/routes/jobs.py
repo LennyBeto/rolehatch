@@ -31,6 +31,7 @@ def build_search_query(
     q = (
         select(
             Job.id, Job.title, Job.location, Job.remote_type, Job.commitment,
+            Job.level, Job.tech_stack, Job.description,
             Job.salary_min, Job.salary_max, Job.source, Job.source_url,
             Job.is_active, Job.featured_until, Job.posted_at,
             Company.name.label("company_name"), Company.domain.label("company_domain"),
@@ -64,6 +65,9 @@ def _serialize_row(row, now: datetime) -> dict:
         "location": m["location"],
         "remote_type": m["remote_type"],
         "commitment": m["commitment"],
+        "level": m["level"],
+        "tech_stack": m["tech_stack"],
+        "description": m["description"],
         "salary_min": float(m["salary_min"]) if m["salary_min"] is not None else None,
         "salary_max": float(m["salary_max"]) if m["salary_max"] is not None else None,
         "source": m["source"],

@@ -52,9 +52,8 @@ export default function JobList() {
     router.push(`/?${params.toString()}#listings`);
   };
 
- // if (loading) return <Center py={20}><Spinner size="lg" color="brand.500" /></Center>;
- if (loading) return <JobListSkeleton />; 
- if (!data || data.jobs.length === 0) {
+  if (loading) return <JobListSkeleton />;
+  if (!data || data.jobs.length === 0) {
     return <Center py={20}><Text color="gray.500">No jobs match your filters.</Text></Center>;
   }
 

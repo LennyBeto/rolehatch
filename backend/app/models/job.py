@@ -30,6 +30,8 @@ class Job(Base):
     company_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"))
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    level: Mapped[str | None] = mapped_column(String(20))          # entry / mid / senior
+    tech_stack: Mapped[list[str] | None] = mapped_column(ARRAY(String))
     location: Mapped[str | None] = mapped_column(String(255))
     remote_type: Mapped[str | None] = mapped_column(String(30))  # remote/hybrid/onsite/field
     commitment: Mapped[str | None] = mapped_column(String(30))   # full_time/part_time/contract

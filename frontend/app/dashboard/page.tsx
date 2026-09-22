@@ -8,7 +8,7 @@ import { authedFetch } from "@/lib/api";
 import { toaster } from "@/components/ui/toaster";
 
 type EmployerJob = {
-  id: string; title: string; is_featured: boolean; featured_until: string | null;
+  id: string; title: string; is_featured: boolean; featured_until: string | null; level: string | null; tech_stack: string[] | null;
 };
 
 export default function EmployerDashboard() {

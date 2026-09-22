@@ -10,8 +10,20 @@ from app.services.scrapers.lever import LeverScraper
 from app.services.scrapers.workday import WorkdayScraper
 from app.services.scrapers.bamboohr import BambooHRScraper
 import logging
+import re
 
 logger = logging.getLogger("perchrole.pipeline")
+
+TECH_KEYWORDS = [
+    "python", "django", "fastapi", "flask", "javascript", "typescript",
+    "react", "next.js", "vue", "node.js", "java", "go", "golang", "rust",
+    "c#", ".net", "postgresql", "postgres", "mysql", "mongodb", "redis",
+    "aws", "gcp", "azure", "docker", "kubernetes", "terraform", "graphql",
+    "rest api", "sql", "swift", "kotlin", "ruby", "rails", "php", "laravel",
+]
+
+SENIOR_KEYWORDS = ["senior", "staff", "principal", "lead", "director", "vp", "head of"]
+ENTRY_KEYWORDS = ["junior", "entry", "associate", "intern", "graduate"]
 
 SCRAPERS = {
     "greenhouse": lambda c: GreenhouseScraper().scrape(c.board_token),
@@ -29,6 +41,39 @@ def _parse_posted_at(raw_value: str | None):
     except (ValueError, TypeError):
         return None
 
+def _strip_html(raw_html: str | None) -> str | None:
+    if not raw_html:
+        return None
+    text = re.sub(r"<[^>]+>", " ", raw_html)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text or None
+
+
+def _infer_level(title: str) -> str:
+    title_lower = title.lower()
+    if any(kw in title_lower for kw in SENIOR_KEYWORDS):
+        return "senior"
+    if any(kw in title_lower for kw in ENTRY_KEYWORDS):
+        return "entry"
+    return "mid"
+
+
+def _infer_remote_type(location: str | None) -> str | None:
+    if not location:
+        return None
+    loc_lower = location.lower()
+    if "remote" in loc_lower:
+        return "remote"
+    if "hybrid" in loc_lower:
+        return "hybrid"
+    return None  # unknown — leave null rather than guessing "onsite" incorrectly
+
+
+def _extract_tech_stack(description: str | None) -> list[str]:
+    if not description:
+        return []
+    desc_lower = description.lower()
+    return [kw for kw in TECH_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", desc_lower)]
 
 async def sync_company(db: Session, company: Company):
     scrape_fn = SCRAPERS.get(company.source_platform)
@@ -47,6 +92,10 @@ async def sync_company(db: Session, company: Company):
             continue
 
         posted_at = _parse_posted_at(j.get("posted_at"))
+        description = _strip_html(j.get("content"))
+        level = _infer_level(j["title"])
+        remote_type = _infer_remote_type(j.get("location"))
+        tech_stack = _extract_tech_stack(description)
 
         stmt = pg_insert(Job).values(
             company_id=company.id,
@@ -57,6 +106,10 @@ async def sync_company(db: Session, company: Company):
             external_id=external_id,
             is_active=True,
             posted_at=posted_at,
+            description=description,
+            level=level,
+            remote_type=remote_type,
+            tech_stack=tech_stack,
         ).on_conflict_do_update(
             index_elements=["source", "external_id"],
             set_={
@@ -65,6 +118,10 @@ async def sync_company(db: Session, company: Company):
                 "is_active": True,
                 "scraped_at": func.now(),
                 "posted_at": posted_at,
+                "description": description,
+                "level": level,
+                "remote_type": remote_type,
+                "tech_stack": tech_stack,
             },
         )
         db.execute(stmt)

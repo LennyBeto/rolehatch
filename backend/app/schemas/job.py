@@ -11,6 +11,9 @@ class JobOut(BaseModel):
     location: str | None
     remote_type: str | None
     commitment: str | None = None
+    level: str | None = None
+    tech_stack: list[str] = []
+    description: str | None = None
     salary_min: float | None
     salary_max: float | None
     source: str

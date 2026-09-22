@@ -11,6 +11,7 @@ class GreenhouseScraper(BaseScraper):
                 "url": j["absolute_url"],
                 "source": "greenhouse",
                 "posted_at": j.get("updated_at"),  # ISO 8601 string, e.g. "2026-09-10T14:32:00-04:00"
+                "content": j.get("content"),  # raw HTML — cleaned in the pipeline
             }
             for j in data.get("jobs", [])
         ]
