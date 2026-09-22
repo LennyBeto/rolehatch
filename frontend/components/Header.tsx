@@ -1,6 +1,7 @@
 // frontend/components/Header.tsx
 "use client";
-import { Flex, Heading, Spacer, HStack, Button, Text, Menu, Portal, Avatar } from "@chakra-ui/react";
+import { Flex, Heading, HStack, Button, Text, Menu, Portal, Avatar } from "@chakra-ui/react";
+import Link from "next/link";
 import { useState } from "react";
 import Logo from "./Logo";
 import { ColorModeButton } from "@/components/ui/color-mode";
@@ -30,17 +31,19 @@ export default function Header() {
         zIndex={10}
         boxShadow="0 1px 2px rgba(0,0,0,0.03)"
       >
-        <Flex as="a" href="/" align="center" gap={2.5} flexShrink={0} textDecoration="none" _hover={{ textDecoration: "none" }}>
-          <Logo size={32} />
-          <Heading as="span" size="lg" color="brand.500" lineHeight="1" letterSpacing="-0.03em">
-            PerchRole
-          </Heading>
-        </Flex>
+        <Link href="/" style={{ textDecoration: "none" }}>
+          <Flex align="center" gap={2.5} flexShrink={0}>
+            <Logo size={32} />
+            <Heading as="span" size="lg" color="brand.500" lineHeight="1" letterSpacing="-0.03em">
+              PerchRole
+            </Heading>
+          </Flex>
+        </Link>
 
         <Flex flex="1" justify="center">
           <HStack gap={4} display={{ base: "none", md: "flex" }}>
-            <Text as="a" href="/#listings" fontSize="sm" fontWeight="500" cursor="pointer">Find Jobs</Text>
-            <Text as="a" href="/post-job" fontSize="sm" fontWeight="500" cursor="pointer">Post a Job</Text>
+            <Link href="/#listings" style={{ fontSize: "14px", fontWeight: 500, cursor: "pointer", textDecoration: "none", color: "inherit" }}>Find Jobs</Link>
+            <Link href="/post-job" style={{ fontSize: "14px", fontWeight: 500, cursor: "pointer", textDecoration: "none", color: "inherit" }}>Post a Job</Link>
             <Text fontSize="sm" fontWeight="500" cursor="pointer">Company</Text>
             <Text fontSize="sm" fontWeight="500" cursor="pointer">Blog</Text>
           </HStack>

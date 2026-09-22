@@ -4,17 +4,17 @@ import { Wrap, Button } from "@chakra-ui/react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const CHIPS = [
-  { label: "AI/ML", type: "title", value: "artificial intelligence" },
+  { label: "AI/ML", type: "title", value: "artificial intelligence|machine learning" },
   { label: "Backend", type: "title", value: "backend" },
   { label: "Frontend", type: "title", value: "frontend" },
-  { label: "UI/UX", type: "title", value: "ux" },
+  { label: "UI/UX", type: "title", value: "ui/ux|user experience" },
   { label: "Full-Stack", type: "title", value: "full-stack" },
   { label: "DevOps", type: "title", value: "devops" },
-  { label: "SRE", type: "title", value: "site reliability" },
-  { label: "Data Analytics", type: "title", value: "data analyst" },
-  { label: "Data Science", type: "title", value: "data scientist" },
-  { label: "Product Manager", type: "title", value: "product manager" },
-  { label: "Cybersecurity", type: "title", value: "security" },
+  { label: "SRE", type: "title", value: "site reliability|sre" },
+  { label: "Data Analytics", type: "title", value: "data analytics|data analyst" },
+  { label: "Data Science", type: "title", value: "data science|data scientist" },
+  { label: "Product Manager", type: "title", value: "product manager|pm" },
+  { label: "Cybersecurity", type: "title", value: "cybersecurity|security" },
 ];
 
 export default function QuickFilterChips() {
@@ -29,13 +29,13 @@ export default function QuickFilterChips() {
     if (normalizedCurrent.includes(normalizedValue)) return true;
 
     const synonyms: Record<string, string[]> = {
-      "artificial intelligence": ["artificial intelligence", "machine learning", "ai", "ml"],
-      ux: ["ux", "ui/ux", "user experience", "design"],
-      "site reliability": ["site reliability", "sre", "reliability engineer", "platform engineer"],
-      "data analyst": ["data analyst", "analytics", "analysis"],
-      "data scientist": ["data scientist", "data science", "scientist"],
-      "product manager": ["product manager", "pm"],
-      security: ["security", "cybersecurity", "information security", "security engineer"],
+      "artificial intelligence|machine learning": ["artificial intelligence", "machine learning", "ai", "ml", "artificial intelligence engineer", "machine learning engineer"],
+      "ui/ux|user experience": ["ux", "ui/ux", "user experience", "design", "product designer", "interaction designer"],
+      "site reliability|sre": ["site reliability", "sre", "reliability engineer", "platform engineer"],
+      "data analytics|data analyst": ["data analytics", "data analyst", "analytics", "analysis"],
+      "data science|data scientist": ["data science", "data scientist", "scientist"],
+      "product manager|pm": ["product manager", "pm"],
+      "cybersecurity|security": ["security", "cybersecurity", "information security", "security engineer"],
     };
 
     return (synonyms[normalizedValue] ?? []).some((term) => normalizedCurrent.includes(term));

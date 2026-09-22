@@ -1,6 +1,8 @@
 # backend/app/api/routes/jobs.py
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
@@ -42,7 +44,26 @@ def build_search_query(
     if location:
         q = q.where(Job.location.ilike(f"%{location}%"))
     if title:
-        q = q.where(Job.title.ilike(f"%{title}%"))
+        title_variants = [
+            part.strip()
+            for part in re.split(r"\s*(?:,|/|\||\band\b)\s*", title.lower())
+            if part and part.strip()
+        ]
+        if not title_variants:
+            title_variants = [title.strip()]
+
+        phrases = []
+        words = []
+        for variant in title_variants:
+            clean_variant = variant.strip()
+            if clean_variant:
+                phrases.append(clean_variant)
+                words.extend(word for word in re.split(r"\s+", clean_variant) if word)
+
+        title_filters = [Job.title.ilike(f"%{phrase}%") for phrase in phrases]
+        title_filters.extend(Job.title.ilike(f"%{word}%") for word in words)
+        if title_filters:
+            q = q.where(or_(*title_filters))
     if salary_min:
         q = q.where(Job.salary_min >= salary_min)
     if remote_type:

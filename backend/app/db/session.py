@@ -6,9 +6,10 @@ from app.core.config import settings
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
-    pool_size=10,        # up from 5 — more concurrent query capacity under load
-    max_overflow=20,
-    pool_recycle=1800,   # recycle connections every 30 min, avoids stale Supabase connections
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_timeout=settings.db_pool_timeout,
+    pool_recycle=1800,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

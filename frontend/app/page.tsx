@@ -1,5 +1,6 @@
 // frontend/app/page.tsx
 import { Box, Flex } from "@chakra-ui/react";
+import { Suspense } from "react";
 import HeroSection from "@/components/HeroSection";
 import SocialProof from "@/components/SocialProof";
 import QuickFilterChips from "@/components/QuickFilterChips";
@@ -11,21 +12,23 @@ import EmployerPricingPreview from "@/components/EmployerPricingPreview";
 export default function HomePage() {
   return (
     <Box bg="background" minH="100vh">
-      <HeroSection />
-      <SocialProof />
-      <Box maxW="1200px" mx="auto" px={4} pt={6}>
-        <QuickFilterChips />
-      </Box>
-      <Flex id="listings" maxW="1200px" mx="auto" gap={6} px={4} pb={10} scrollMarginTop="80px">
-        <Box w="280px" flexShrink={0} display={{ base: "none", md: "block" }}>
-          <FilterSidebar />
+      <Suspense fallback={<Box minH="200px" />}>
+        <HeroSection />
+        <SocialProof />
+        <Box maxW="1200px" mx="auto" px={4} pt={6}>
+          <QuickFilterChips />
         </Box>
-        <Box flex="1">
-          <JobList />
-        </Box>
-      </Flex>
-      <JobAlertForm />
-      <EmployerPricingPreview />
+        <Flex id="listings" maxW="1200px" mx="auto" gap={6} px={4} pb={10} scrollMarginTop="80px">
+          <Box w="280px" flexShrink={0} display={{ base: "none", md: "block" }}>
+            <FilterSidebar />
+          </Box>
+          <Box flex="1">
+            <JobList />
+          </Box>
+        </Flex>
+        <JobAlertForm />
+        <EmployerPricingPreview />
+      </Suspense>
     </Box>
   );
 }

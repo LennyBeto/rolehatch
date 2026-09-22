@@ -42,3 +42,13 @@ app.include_router(companies.router, prefix="/api/companies", tags=["companies"]
 app.include_router(employer_jobs.router, prefix="/api/employer/jobs", tags=["employer-jobs"])
 app.include_router(contact.router, prefix="/api/contact", tags=["contact"])
 app.include_router(internal.router)  # no prefix — route already defines /internal/sync-jobs
+
+
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+async def readyz():
+    return {"status": "ready"}

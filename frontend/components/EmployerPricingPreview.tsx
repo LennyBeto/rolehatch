@@ -40,11 +40,11 @@ export default function EmployerPricingPreview() {
         </SimpleGrid>
 
         <HStack justify="center" gap={4}>
-          <Button as={Link} href="/dashboard" colorPalette="brand" size="lg" borderRadius="full" px={8}>
-            Post a Job
+          <Button asChild colorPalette="brand" size="lg" borderRadius="full" px={8}>
+            <Link href="/dashboard">Post a Job</Link>
           </Button>
-          <Button as={Link} href="/pricing" variant="outline" colorPalette="brand" size="lg" borderRadius="full" px={8}>
-            View Full Pricing
+          <Button asChild variant="outline" colorPalette="brand" size="lg" borderRadius="full" px={8}>
+            <Link href="/pricing">View Full Pricing</Link>
           </Button>
         </HStack>
       </Box>

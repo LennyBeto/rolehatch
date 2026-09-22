@@ -42,6 +42,10 @@ class Settings(BaseSettings):
         alias="ALLOWED_ORIGINS",
     )
     scheduler_secret: str = Field(..., description="Scheduler Secret", alias="SCHEDULER_SECRET")
+    db_pool_size: int = Field(default=10, description="SQLAlchemy DB pool size", alias="DB_POOL_SIZE")
+    db_max_overflow: int = Field(default=20, description="SQLAlchemy DB max overflow", alias="DB_MAX_OVERFLOW")
+    db_pool_timeout: int = Field(default=30, description="SQLAlchemy DB pool timeout", alias="DB_POOL_TIMEOUT")
+    web_concurrency: int = Field(default=2, description="Uvicorn worker count", alias="WEB_CONCURRENCY")
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
