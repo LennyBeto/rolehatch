@@ -30,21 +30,23 @@ export default function Header() {
         zIndex={10}
         boxShadow="0 1px 2px rgba(0,0,0,0.03)"
       >
-        <Flex align="center" gap={2}>
-          <Logo size={28} />
-          <Heading size="md" color="brand.500">PerchRole</Heading>
+        <Flex as="a" href="/" align="center" gap={2.5} flexShrink={0} textDecoration="none" _hover={{ textDecoration: "none" }}>
+          <Logo size={32} />
+          <Heading as="span" size="lg" color="brand.500" lineHeight="1" letterSpacing="-0.03em">
+            PerchRole
+          </Heading>
         </Flex>
 
-        <HStack gap={5} display={{ base: "none", md: "flex" }}>
-          <Text as="a" href="/#listings" fontSize="sm" fontWeight="500" cursor="pointer">Find Jobs</Text>
-          <Text as="a" href="/post-job" fontSize="sm" fontWeight="500" cursor="pointer">Post a Job</Text>
-          <Text fontSize="sm" fontWeight="500" cursor="pointer">Company</Text>
-          <Text fontSize="sm" fontWeight="500" cursor="pointer">Blog</Text>
-        </HStack>
+        <Flex flex="1" justify="center">
+          <HStack gap={4} display={{ base: "none", md: "flex" }}>
+            <Text as="a" href="/#listings" fontSize="sm" fontWeight="500" cursor="pointer">Find Jobs</Text>
+            <Text as="a" href="/post-job" fontSize="sm" fontWeight="500" cursor="pointer">Post a Job</Text>
+            <Text fontSize="sm" fontWeight="500" cursor="pointer">Company</Text>
+            <Text fontSize="sm" fontWeight="500" cursor="pointer">Blog</Text>
+          </HStack>
+        </Flex>
 
-        <Spacer />
-
-        <HStack gap={3}>
+        <HStack gap={3} flexShrink={0}>
           <ColorModeButton />
 
           {user ? (
