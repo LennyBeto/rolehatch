@@ -17,7 +17,14 @@
 .dark {
   --background: #0f1210;
   --foreground: #ededed;
+  --border-soft: #4b5563;
   color-scheme: dark;
+}
+
+html.dark *,
+html.dark *::before,
+html.dark *::after {
+  border-color: var(--border-soft) !important;
 }
 
 body {
