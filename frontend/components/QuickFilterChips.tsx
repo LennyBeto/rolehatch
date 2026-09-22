@@ -4,17 +4,17 @@ import { Wrap, Button } from "@chakra-ui/react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const CHIPS = [
-  { label: "AI/ML", type: "title", value: "ai-ml" },
+  { label: "AI/ML", type: "title", value: "artificial intelligence" },
   { label: "Backend", type: "title", value: "backend" },
   { label: "Frontend", type: "title", value: "frontend" },
-  { label: "UI/UX", type: "title", value: "ui-ux" },
+  { label: "UI/UX", type: "title", value: "ux" },
   { label: "Full-Stack", type: "title", value: "full-stack" },
   { label: "DevOps", type: "title", value: "devops" },
-  { label: "SRE", type: "title", value: "sre" },
-  { label: "Data Analytics", type: "title", value: "data-analytics" },
-  { label: "Data Science", type: "title", value: "data-science" },
-  { label: "Product Manager", type: "title", value: "product-manager" },
-  { label: "Cybersecurity", type: "title", value: "cybersecurity" },
+  { label: "SRE", type: "title", value: "site reliability" },
+  { label: "Data Analytics", type: "title", value: "data analyst" },
+  { label: "Data Science", type: "title", value: "data scientist" },
+  { label: "Product Manager", type: "title", value: "product manager" },
+  { label: "Cybersecurity", type: "title", value: "security" },
 ];
 
 export default function QuickFilterChips() {
@@ -23,7 +23,22 @@ export default function QuickFilterChips() {
 
   const isActive = (type: string, value: string) => {
     const current = searchParams.get(type) ?? "";
-    return current.toLowerCase().includes(value.toLowerCase());
+    const normalizedCurrent = current.toLowerCase();
+    const normalizedValue = value.toLowerCase();
+
+    if (normalizedCurrent.includes(normalizedValue)) return true;
+
+    const synonyms: Record<string, string[]> = {
+      "artificial intelligence": ["artificial intelligence", "machine learning", "ai", "ml"],
+      ux: ["ux", "ui/ux", "user experience", "design"],
+      "site reliability": ["site reliability", "sre", "reliability engineer", "platform engineer"],
+      "data analyst": ["data analyst", "analytics", "analysis"],
+      "data scientist": ["data scientist", "data science", "scientist"],
+      "product manager": ["product manager", "pm"],
+      security: ["security", "cybersecurity", "information security", "security engineer"],
+    };
+
+    return (synonyms[normalizedValue] ?? []).some((term) => normalizedCurrent.includes(term));
   };
 
   const toggleChip = (type: string, value: string) => {
@@ -39,8 +54,8 @@ export default function QuickFilterChips() {
       if (next.length) params.set("remote_type", next.join(","));
       else params.delete("remote_type");
     } else {
-      // title chips toggle a single keyword on/off
-      params.set("title", active ? "" : value);
+      const nextValue = active ? "" : value;
+      params.set("title", nextValue);
       if (!params.get("title")) params.delete("title");
     }
 
