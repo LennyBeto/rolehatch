@@ -44,7 +44,7 @@ export default function Header() {
           <HStack gap={4} display={{ base: "none", md: "flex" }}>
             <Link href="/#listings" style={{ fontSize: "14px", fontWeight: 500, cursor: "pointer", textDecoration: "none", color: "inherit" }}>Find Jobs</Link>
             <Link href="/post-job" style={{ fontSize: "14px", fontWeight: 500, cursor: "pointer", textDecoration: "none", color: "inherit" }}>Post a Job</Link>
-            <Text fontSize="sm" fontWeight="500" cursor="pointer">Company</Text>
+            <Link href="/company" style={{ fontSize: "14px", fontWeight: 500, cursor: "pointer", textDecoration: "none", color: "inherit" }}>Company</Link>
             <Text fontSize="sm" fontWeight="500" cursor="pointer">Blog</Text>
           </HStack>
         </Flex>
