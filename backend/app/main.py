@@ -7,7 +7,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
-from app.api.routes import jobs, saved_jobs, promote, internal, job_alerts, companies, employer_jobs
+from app.api.routes import jobs, saved_jobs, promote, internal, job_alerts, companies, employer_jobs, contact
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="PerchRole API")
@@ -40,4 +40,5 @@ app.include_router(promote.router, prefix="/api/promote", tags=["promote"])
 app.include_router(job_alerts.router, prefix="/api/job-alerts", tags=["job-alerts"])
 app.include_router(companies.router, prefix="/api/companies", tags=["companies"])
 app.include_router(employer_jobs.router, prefix="/api/employer/jobs", tags=["employer-jobs"])
+app.include_router(contact.router, prefix="/api/contact", tags=["contact"])
 app.include_router(internal.router)  # no prefix — route already defines /internal/sync-jobs
