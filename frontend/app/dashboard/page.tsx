@@ -23,8 +23,11 @@ export default function EmployerDashboard() {
   useEffect(() => {
     if (!user) return;
     authedFetch("/api/promote/my-jobs")
-      .then((res) => res.json())
-      .then(setJobs)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load jobs");
+        return res.json();
+      })
+      .then((data) => setJobs(Array.isArray(data) ? data : []))
       .catch(() => toaster.create({ title: "Couldn't load your jobs", type: "error" }));
   }, [user]);
 
