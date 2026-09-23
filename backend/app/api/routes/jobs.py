@@ -1,5 +1,6 @@
 # backend/app/api/routes/jobs.py
 import re
+import statistics
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func, or_, select
@@ -15,6 +16,7 @@ router = APIRouter()
 
 PAGE_SIZE = 15
 SEARCH_CACHE_TTL = 3300   # ~55 min — just under the hourly scrape cycle
+SALARY_INSIGHTS_CACHE_TTL = 3600  # 1 hr — matches scrape cadence, no point recomputing more often
 FACETS_CACHE_TTL = 1800
 STATS_CACHE_TTL = 1800
 JOB_DETAIL_CACHE_TTL = 3600
@@ -143,6 +145,57 @@ def search_jobs(
     set_cached(key, results, ttl_seconds=SEARCH_CACHE_TTL)
     return results
 
+@router.get("/salary-insights")
+def get_salary_insights(
+    title: str = Query(..., min_length=1),
+    company_domain: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Aggregated salary range for a role title, optionally scoped to one company.
+    Pulls from active listings that actually have salary data. Thin samples are
+    flagged (not hidden) so the frontend can decide how to present them.
+    """
+    params = {"title": title, "company_domain": company_domain}
+    key = cache_key("salary_insights", params)
+    if (cached := get_cached(key)) is not None:
+        return cached
+
+    q = (
+        select(Job.salary_min, Job.salary_max)
+        .join(Company, Job.company_id == Company.id)
+        .where(
+            Job.is_active.is_(True),
+            Job.salary_min.isnot(None),
+            Job.title.ilike(f"%{title}%"),
+        )
+    )
+    if company_domain:
+        q = q.where(func.lower(Company.domain) == company_domain.lower())
+
+    rows = db.execute(q).all()
+    mins = [float(r.salary_min) for r in rows if r.salary_min is not None]
+    maxs = [float(r.salary_max) for r in rows if r.salary_max is not None] or mins
+
+    if not mins:
+        result = {
+            "title": title, "company_domain": company_domain,
+            "sample_size": 0, "low_confidence": True,
+            "salary_min": None, "salary_median": None, "salary_max": None,
+        }
+    else:
+        result = {
+            "title": title,
+            "company_domain": company_domain,
+            "sample_size": len(mins),
+            "low_confidence": len(mins) < 3,  # fewer than 3 listings — don't trust the range
+            "salary_min": min(mins),
+            "salary_median": round(statistics.median(mins + maxs), 2),
+            "salary_max": max(maxs),
+        }
+
+    set_cached(key, result, ttl_seconds=SALARY_INSIGHTS_CACHE_TTL)
+    return result
 
 @router.get("/facets")
 def get_facets(db: Session = Depends(get_db)):
