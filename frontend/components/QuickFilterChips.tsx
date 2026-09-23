@@ -22,7 +22,7 @@ export default function QuickFilterChips() {
   const searchParams = useSearchParams();
 
   const isActive = (type: string, value: string) => {
-    const current = searchParams.get(type) ?? "";
+    const current = searchParams.get(type === "title" ? "quick_filter" : type) ?? searchParams.get("title") ?? "";
     const normalizedCurrent = current.toLowerCase();
     const normalizedValue = value.toLowerCase();
 
@@ -54,9 +54,8 @@ export default function QuickFilterChips() {
       if (next.length) params.set("remote_type", next.join(","));
       else params.delete("remote_type");
     } else {
-      const nextValue = active ? "" : value;
-      params.set("title", nextValue);
-      if (!params.get("title")) params.delete("title");
+      if (active) params.delete("quick_filter");
+      else params.set("quick_filter", value);
     }
 
     router.push(`/?${params.toString()}`);

@@ -35,7 +35,8 @@ export default function HeroSection() {
     const params = new URLSearchParams();
     // Category is folded into the title keyword search until real category/tag
     // data exists on jobs — see note below the component.
-    const combinedTitle = [title, category[0]].filter(Boolean).join(" ");
+    const quickFilter = searchParams.get("quick_filter");
+    const combinedTitle = [title, category[0], quickFilter].filter(Boolean).join(" ");
     if (combinedTitle) params.set("title", combinedTitle);
     if (location) params.set("location", location);
     router.push(`/?${params.toString()}#listings`);
@@ -50,7 +51,8 @@ export default function HeroSection() {
         mb={4}
         fontWeight="700"
       >
-        Find Verified Remote &amp; Tech Jobs, Sourced Directly From Employers
+        
+        Find Verified Global Tech Jobs, Sourced Directly From Employers
       </Heading>
       <Text color="gray.600" fontSize={{ base: "md", md: "lg" }} mt={1} mb={8} maxW="600px" mx="auto">
         PerchRole pulls listings straight from company career pages — no reposts,

@@ -12,8 +12,10 @@ export default function SearchBar() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const params = new URLSearchParams(searchParams.toString());
+    const quickFilter = searchParams.get("quick_filter");
     params.delete("page");
-    if (query) params.set("title", query);
+    const combinedQuery = [query, quickFilter].filter(Boolean).join(" ");
+    if (combinedQuery) params.set("title", combinedQuery);
     else params.delete("title");
     router.push(`/?${params.toString()}`);
   };
