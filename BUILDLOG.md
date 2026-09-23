@@ -1,5 +1,5 @@
 <!-- BUILDLOG.md -->
-# BUILDLOG.md — RoleHatch
+# BUILDLOG.md — PerchRole
 
 ## Phase 0 — Foundation (2026-09-14)
 - [x] Repo structure, LICENSE, Docker skeleton
