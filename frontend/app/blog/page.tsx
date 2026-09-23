@@ -1,4 +1,5 @@
 // frontend/app/blog/page.tsx
+"use client";
 import { Box, Heading, Text, Stack, Link as ChakraLink } from "@chakra-ui/react";
 import NextLink from "next/link";
 import { BLOG_POSTS } from "@/lib/blogPosts";
