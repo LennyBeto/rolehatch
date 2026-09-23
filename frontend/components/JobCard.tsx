@@ -6,6 +6,7 @@ import { useState } from "react";
 import { formatPostAge } from "@/lib/formatPostAge";
 import { useAuth } from "@/lib/AuthContext";
 import SignInModal from "./SignInModal";
+import SalaryInsightsWidget from "./SalaryInsightsWidget";
 
 type Job = {
   id: string; title: string; location: string | null;
@@ -76,10 +77,12 @@ export default function JobCard({ job }: { job: Job }) {
                 {job.company_name ?? "Company"} · {job.location ?? "Location unspecified"}
               </Text>
             </Box>
-            {job.salary_min && (
+            {job.salary_min ? (
               <Text fontSize="sm" fontWeight="600" color="text" whiteSpace="nowrap">
                 ${job.salary_min}k – ${job.salary_max}k
               </Text>
+            ) : (
+              <SalaryInsightsWidget title={job.title} companyDomain={job.company_domain} compact />
             )}
           </Flex>
 
