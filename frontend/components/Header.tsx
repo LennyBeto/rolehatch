@@ -53,20 +53,41 @@ export default function Header() {
           <ColorModeButton />
 
           {user ? (
-            <Menu.Root>
+            <Menu.Root positioning={{ placement: "bottom-end", gutter: 8 }}>
+              {/* Button anchor instead of Avatar.Root directly — Avatar.Root
+                  does not reliably forward its ref for asChild, which was
+                  causing the menu to render unpositioned at the top of the page. */}
               <Menu.Trigger asChild>
-                <Avatar.Root size="sm" cursor="pointer">
-                  <Avatar.Fallback name={user.email ?? "User"} />
-                </Avatar.Root>
+                <Button variant="ghost" p={0} minW="auto" h="auto" borderRadius="full">
+                  <Avatar.Root size="sm" cursor="pointer">
+                    <Avatar.Fallback name={user.email ?? "User"} />
+                  </Avatar.Root>
+                </Button>
               </Menu.Trigger>
               <Portal>
                 <Menu.Positioner>
-                  <Menu.Content>
+                  <Menu.Content minW="200px">
+                    {/* Dashboard — nested submenu, opens on hover */}
+                    <Menu.Root positioning={{ placement: "right-start", gutter: 4 }}>
+                      <Menu.TriggerItem>
+                        Dashboard
+                      </Menu.TriggerItem>
+                      <Portal>
+                        <Menu.Positioner>
+                          <Menu.Content minW="160px">
+                            <Menu.Item value="applicant-dashboard" asChild>
+                              <a href="/my-applications">Applicant</a>
+                            </Menu.Item>
+                            <Menu.Item value="employer-dashboard" asChild>
+                              <a href="/dashboard">Employer</a>
+                            </Menu.Item>
+                          </Menu.Content>
+                        </Menu.Positioner>
+                      </Portal>
+                    </Menu.Root>
+
                     <Menu.Item value="post-job" asChild>
                       <a href="/post-job">Post a Job</a>
-                    </Menu.Item>
-                    <Menu.Item value="dashboard" asChild>
-                      <a href="/dashboard">Dashboard</a>
                     </Menu.Item>
                     <Menu.Item value="signout" onClick={handleSignOut}>
                       Sign Out

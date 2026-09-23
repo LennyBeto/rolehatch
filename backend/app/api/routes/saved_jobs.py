@@ -1,10 +1,11 @@
 # backend/app/api/routes/saved_jobs.py
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.db.session import get_db
 from app.core.security import get_current_user
-from app.models.job import SavedJob
+from app.models.job import SavedJob, Job, Company
 from app.schemas.saved_job import SavedJobCreate, SavedJobUpdate
 
 router = APIRouter()
@@ -40,3 +41,41 @@ def update_saved_job(job_id: str, payload: SavedJobUpdate, user=Depends(get_curr
 @router.get("")
 def list_saved_jobs(user=Depends(get_current_user), db: Session = Depends(get_db)):
     return db.query(SavedJob).filter_by(user_id=user["sub"]).all()
+
+
+# ── NEW: personalized "My Applications" dashboard data ──
+@router.get("/applied")
+def list_applied_jobs(user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Full job + company details for every listing this user marked 'applied',
+    most recently applied first. Powers the /my-applications dashboard."""
+    now = datetime.now(timezone.utc)
+    rows = (
+        db.query(SavedJob, Job, Company)
+        .join(Job, SavedJob.job_id == Job.id)
+        .join(Company, Job.company_id == Company.id)
+        .filter(SavedJob.user_id == user["sub"], SavedJob.status == "applied")
+        .order_by(SavedJob.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": str(job.id),
+            "title": job.title,
+            "location": job.location,
+            "remote_type": job.remote_type,
+            "commitment": job.commitment,
+            "level": job.level,
+            "tech_stack": job.tech_stack,
+            "description": job.description,
+            "salary_min": float(job.salary_min) if job.salary_min is not None else None,
+            "salary_max": float(job.salary_max) if job.salary_max is not None else None,
+            "source": job.source,
+            "source_url": job.source_url,
+            "is_featured": bool(job.featured_until and job.featured_until > now),
+            "posted_at": job.posted_at.isoformat() if job.posted_at else None,
+            "company_name": company.name,
+            "company_domain": company.domain,
+            "applied_at": saved_job.created_at.isoformat(),
+        }
+        for saved_job, job, company in rows
+    ]
