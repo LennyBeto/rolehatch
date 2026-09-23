@@ -1,24 +1,27 @@
-// frontend/components/JobList.tsx
+// frontend/components/JobList.tsx — wrap the results in a gated overlay when signed out
 "use client";
-import { Box, Heading, Text, Stack, Spinner, Center } from "@chakra-ui/react";
+import { Box, Heading, Text, Stack, Center } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toaster } from "@/components/ui/toaster";
+import { useAuth } from "@/lib/AuthContext";
 import JobCard from "./JobCard";
 import PaginationControls from "./PaginationControls";
 import JobListSkeleton from "./JobListSkeleton";
+import SignInModal from "./SignInModal";
 
 type Job = Parameters<typeof JobCard>[0]["job"];
+type SearchResponse = { jobs: Job[]; total: number; page: number; page_size: number; total_pages: number };
 
-type SearchResponse = {
-  jobs: Job[]; total: number; page: number; page_size: number; total_pages: number;
-};
+const SIGNED_OUT_PREVIEW_COUNT = 3;
 
 export default function JobList() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
 
   const currentPage = Number(searchParams.get("page") ?? 1);
 
@@ -26,13 +29,11 @@ export default function JobList() {
     setLoading(true);
     const params = new URLSearchParams();
     const title = searchParams.get("title");
-    const quickFilter = searchParams.get("quick_filter");
     const remoteType = searchParams.get("remote_type");
     const salaryMin = searchParams.get("salary_min");
     const location = searchParams.get("location");
 
-    const combinedTitle = [title, quickFilter].filter(Boolean).join(" ");
-    if (combinedTitle) params.set("title", combinedTitle);
+    if (title) params.set("title", title);
     if (remoteType) params.set("remote_type", remoteType);
     if (salaryMin) params.set("salary_min", salaryMin);
     if (location) params.set("location", location);
@@ -61,10 +62,11 @@ export default function JobList() {
 
   const featured = data.jobs.filter((j) => j.is_featured);
   const regular = data.jobs.filter((j) => !j.is_featured);
+  const visibleJobs = user ? data.jobs : data.jobs.slice(0, SIGNED_OUT_PREVIEW_COUNT);
 
   return (
     <Stack gap={6}>
-      {featured.length > 0 && (
+      {user && featured.length > 0 && (
         <Box>
           <Heading size="sm" color="gray.500" mb={3} textTransform="uppercase" letterSpacing="wide">
             Featured Roles
@@ -76,21 +78,56 @@ export default function JobList() {
       )}
 
       <Box>
-        {featured.length > 0 && (
+        {user && featured.length > 0 && (
           <Heading size="sm" color="gray.500" mb={3} textTransform="uppercase" letterSpacing="wide">
             All Jobs
           </Heading>
         )}
         <Stack gap={4}>
-          {regular.map((job) => <JobCard key={job.id} job={job} />)}
+          {(user ? regular : visibleJobs).map((job) => <JobCard key={job.id} job={job} />)}
         </Stack>
       </Box>
 
-      <PaginationControls
-        currentPage={data.page}
-        totalPages={data.total_pages}
-        onPageChange={goToPage}
-      />
+      {!user && data.jobs.length > SIGNED_OUT_PREVIEW_COUNT && (
+        <Box
+          textAlign="center"
+          py={8}
+          bg="surface"
+          border="1px dashed #E5E3DD"
+          borderRadius="lg"
+        >
+          <Text color="text" fontWeight="600" mb={1}>
+            {data.total - SIGNED_OUT_PREVIEW_COUNT}+ more jobs waiting
+          </Text>
+          <Text color="gray.600" fontSize="sm" mb={4}>
+            Sign in free to see every listing and apply directly.
+          </Text>
+          <Box
+            as="button"
+            onClick={() => setModalOpen(true)}
+            bg="brand.500"
+            color="white"
+            px={6}
+            py={2}
+            borderRadius="full"
+            fontSize="sm"
+            fontWeight="600"
+            cursor="pointer"
+          >
+            Sign In Free
+          </Box>
+        </Box>
+      )}
+
+      {user && (
+        <PaginationControls
+          currentPage={data.page}
+          totalPages={data.total_pages}
+          onPageChange={goToPage}
+        />
+      )}
+
+      <SignInModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
     </Stack>
   );
 }

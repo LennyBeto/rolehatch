@@ -1,9 +1,11 @@
 // frontend/components/JobCard.tsx
 "use client";
 import { Box, Heading, Text, Badge, HStack, Button, Flex, Image, Collapsible, Wrap } from "@chakra-ui/react";
-import { LuChevronDown } from "react-icons/lu";
+import { LuChevronDown, LuLock } from "react-icons/lu";
 import { useState } from "react";
 import { formatPostAge } from "@/lib/formatPostAge";
+import { useAuth } from "@/lib/AuthContext";
+import SignInModal from "./SignInModal";
 
 type Job = {
   id: string; title: string; location: string | null;
@@ -21,13 +23,30 @@ const LEVEL_LABELS: Record<string, string> = {
 };
 
 export default function JobCard({ job }: { job: Job }) {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+
   const logoUrl = job.company_domain
     ? `https://www.google.com/s2/favicons?domain=${job.company_domain}&sz=64`
     : null;
 
   const techStack = job.tech_stack ?? [];
   const hasDetails = Boolean(job.description) || techStack.length > 0;
+
+  const requireAuth = (action: () => void) => () => {
+    if (!user) {
+      setModalOpen(true);
+      return;
+    }
+    action();
+  };
+
+  const handleViewJob = requireAuth(() => {
+    window.open(job.source_url, "_blank", "noopener,noreferrer");
+  });
+
+  const handleToggleDetails = requireAuth(() => setOpen((prev) => !prev));
 
   return (
     <Box
@@ -73,16 +92,15 @@ export default function JobCard({ job }: { job: Job }) {
           </HStack>
 
           <HStack mt={4} gap={3}>
-            <Button asChild size="sm" colorPalette="brand">
-              <a href={job.source_url} target="_blank" rel="noopener noreferrer">View Job</a>
+            <Button size="sm" colorPalette="brand" onClick={handleViewJob}>
+              {user ? "View Job" : (
+                <>
+                  <LuLock style={{ marginRight: 6 }} /> Sign in to View
+                </>
+              )}
             </Button>
             {hasDetails && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setOpen(!open)}
-                aria-expanded={open}
-              >
+              <Button size="sm" variant="ghost" onClick={handleToggleDetails} aria-expanded={open}>
                 Details
                 <Box
                   as={LuChevronDown}
@@ -94,7 +112,7 @@ export default function JobCard({ job }: { job: Job }) {
             )}
           </HStack>
 
-          {hasDetails && (
+          {hasDetails && user && (
             <Collapsible.Root open={open}>
               <Collapsible.Content>
                 <Box mt={4} pt={4} borderTop="1px solid #E5E3DD">
@@ -123,6 +141,8 @@ export default function JobCard({ job }: { job: Job }) {
           )}
         </Box>
       </Flex>
+
+      <SignInModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
     </Box>
   );
 }
