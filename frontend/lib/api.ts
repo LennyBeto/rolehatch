@@ -21,6 +21,9 @@ export const saveJob = (jobId: string) =>
 export const markApplied = (jobId: string) =>
   authedFetch(`/api/saved-jobs/${jobId}`, { method: "PATCH", body: JSON.stringify({ status: "applied" }) });
 
+export const getMyApplications = () =>
+   authedFetch("/api/saved-jobs/applications");
+
 export const hideJob = (jobId: string) =>
   authedFetch(`/api/saved-jobs/${jobId}`, { method: "PATCH", body: JSON.stringify({ status: "hidden" }) });
 
