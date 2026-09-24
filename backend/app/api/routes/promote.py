@@ -88,11 +88,19 @@ def my_jobs(user=Depends(get_current_user), db: Session = Depends(get_db)):
 
     jobs = db.query(Job).filter_by(company_id=company.id, is_active=True).all()
     now = datetime.now(timezone.utc)
+
+    def _is_featured(j: Job) -> bool:
+        return bool(j.featured_until and j.featured_until > now)
+
+    # Featured listings first, then by title, so employers see promoted
+    # roles at the top of their own dashboard too — mirrors public search sort.
+    jobs.sort(key=lambda j: (not _is_featured(j), j.title.lower()))
+
     return [
         {
             "id": str(j.id),
             "title": j.title,
-            "is_featured": bool(j.featured_until and j.featured_until > now),
+            "is_featured": _is_featured(j),
             "featured_until": j.featured_until.isoformat() if j.featured_until else None,
         }
         for j in jobs
