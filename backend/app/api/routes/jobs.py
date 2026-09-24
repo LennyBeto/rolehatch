@@ -20,6 +20,7 @@ SALARY_INSIGHTS_CACHE_TTL = 3600  # 1 hr — matches scrape cadence, no point re
 FACETS_CACHE_TTL = 1800
 STATS_CACHE_TTL = 1800
 JOB_DETAIL_CACHE_TTL = 3600
+SITEMAP_CACHE_TTL = 1800
 
 
 def build_search_query(
@@ -228,6 +229,31 @@ def get_platform_stats(db: Session = Depends(get_db)):
     set_cached(key, stats, ttl_seconds=STATS_CACHE_TTL)
     return stats
 
+@router.get("/sitemap-data")
+def get_sitemap_data(db: Session = Depends(get_db)):
+    """Lightweight {id, updated_at} listing of every active job, consumed by
+    the frontend's dynamic app/sitemap.ts. Kept separate from /search so we
+    don't page through 15-at-a-time or drag along heavy columns just to
+    build a sitemap."""
+    key = "sitemap:jobs"
+    if (cached := get_cached(key)) is not None:
+        return cached
+
+    rows = (
+        db.query(Job.id, Job.posted_at, Job.scraped_at)
+        .filter(Job.is_active.is_(True))
+        .all()
+    )
+    data = [
+        {
+            "id": str(r.id),
+            "updated_at": (r.scraped_at or r.posted_at).isoformat()
+            if (r.scraped_at or r.posted_at) else None,
+        }
+        for r in rows
+    ]
+    set_cached(key, data, ttl_seconds=SITEMAP_CACHE_TTL)
+    return data
 
 # ── Dynamic path last ──
 @router.get("/{job_id}")

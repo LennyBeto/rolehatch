@@ -42,6 +42,11 @@ class Settings(BaseSettings):
         alias="ALLOWED_ORIGINS",
     )
     scheduler_secret: str = Field(..., description="Scheduler Secret", alias="SCHEDULER_SECRET")
+    revalidate_secret: str = Field(
+        default="",
+        description="Shared secret for triggering frontend on-demand revalidation after a sync run",
+        alias="REVALIDATE_SECRET",
+    )
     db_pool_size: int = Field(default=10, description="SQLAlchemy DB pool size", alias="DB_POOL_SIZE")
     db_max_overflow: int = Field(default=20, description="SQLAlchemy DB max overflow", alias="DB_MAX_OVERFLOW")
     db_pool_timeout: int = Field(default=30, description="SQLAlchemy DB pool timeout", alias="DB_POOL_TIMEOUT")
@@ -50,9 +55,6 @@ class Settings(BaseSettings):
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def split_allowed_origins(cls, v):
-        # .env stores this as a plain comma-separated string, e.g.
-        # ALLOWED_ORIGINS=https://rolehatch.com,https://www.rolehatch.com
-        # — without this, Pydantic tries to JSON-decode it and raises on import.
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v

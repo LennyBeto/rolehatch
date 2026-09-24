@@ -1,12 +1,10 @@
 // frontend/components/JobCard.tsx
 "use client";
 import { Box, Heading, Text, Badge, HStack, Button, Flex, Image, Collapsible, Wrap } from "@chakra-ui/react";
-import { LuChevronDown, LuLock } from "react-icons/lu";
+import { LuChevronDown } from "react-icons/lu";
 import { useState } from "react";
+import Link from "next/link";
 import { formatPostAge } from "@/lib/formatPostAge";
-import { useAuth } from "@/lib/AuthContext";
-import SignInModal from "./SignInModal";
-import SalaryInsightsWidget from "./SalaryInsightsWidget";
 
 type Job = {
   id: string; title: string; location: string | null;
@@ -24,9 +22,7 @@ const LEVEL_LABELS: Record<string, string> = {
 };
 
 export default function JobCard({ job }: { job: Job }) {
-  const { user } = useAuth();
   const [open, setOpen] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
 
   const logoUrl = job.company_domain
     ? `https://www.google.com/s2/favicons?domain=${job.company_domain}&sz=64`
@@ -34,20 +30,6 @@ export default function JobCard({ job }: { job: Job }) {
 
   const techStack = job.tech_stack ?? [];
   const hasDetails = Boolean(job.description) || techStack.length > 0;
-
-  const requireAuth = (action: () => void) => () => {
-    if (!user) {
-      setModalOpen(true);
-      return;
-    }
-    action();
-  };
-
-  const handleViewJob = requireAuth(() => {
-    window.open(job.source_url, "_blank", "noopener,noreferrer");
-  });
-
-  const handleToggleDetails = requireAuth(() => setOpen((prev) => !prev));
 
   return (
     <Box
@@ -72,17 +54,20 @@ export default function JobCard({ job }: { job: Job }) {
         <Box flex={1}>
           <Flex justify="space-between" align="flex-start">
             <Box>
-              <Heading size="md" color="text" mb={1}>{job.title}</Heading>
+              {/* Internal, crawlable link — this is what gives each job its own indexable URL */}
+              <Link href={`/jobs/${job.id}`} style={{ textDecoration: "none" }}>
+                <Heading size="md" color="text" mb={1} _hover={{ textDecoration: "underline" }}>
+                  {job.title}
+                </Heading>
+              </Link>
               <Text color="gray.600" fontSize="sm">
                 {job.company_name ?? "Company"} · {job.location ?? "Location unspecified"}
               </Text>
             </Box>
-            {job.salary_min ? (
+            {job.salary_min && (
               <Text fontSize="sm" fontWeight="600" color="text" whiteSpace="nowrap">
                 ${job.salary_min}k – ${job.salary_max}k
               </Text>
-            ) : (
-              <SalaryInsightsWidget title={job.title} companyDomain={job.company_domain} compact />
             )}
           </Flex>
 
@@ -95,15 +80,11 @@ export default function JobCard({ job }: { job: Job }) {
           </HStack>
 
           <HStack mt={4} gap={3}>
-            <Button size="sm" colorPalette="brand" onClick={handleViewJob}>
-              {user ? "View Job" : (
-                <>
-                  <LuLock style={{ marginRight: 6 }} /> Sign in to View
-                </>
-              )}
+            <Button asChild size="sm" colorPalette="brand">
+              <Link href={`/jobs/${job.id}`}>View Job</Link>
             </Button>
             {hasDetails && (
-              <Button size="sm" variant="ghost" onClick={handleToggleDetails} aria-expanded={open}>
+              <Button size="sm" variant="ghost" onClick={() => setOpen((prev) => !prev)} aria-expanded={open}>
                 Details
                 <Box
                   as={LuChevronDown}
@@ -115,7 +96,7 @@ export default function JobCard({ job }: { job: Job }) {
             )}
           </HStack>
 
-          {hasDetails && user && (
+          {hasDetails && (
             <Collapsible.Root open={open}>
               <Collapsible.Content>
                 <Box mt={4} pt={4} borderTop="1px solid #E5E3DD">
@@ -144,8 +125,6 @@ export default function JobCard({ job }: { job: Job }) {
           )}
         </Box>
       </Flex>
-
-      <SignInModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
     </Box>
   );
 }
