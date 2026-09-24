@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { upsertApplicantProfile, getMyApplicantProfile } from "@/lib/api";
 import { toaster } from "@/components/ui/toaster";
+import MyApplicationsTable from "@/components/MyApplicationsTable";
 
 export default function ApplicantProfilePage() {
   const { user, loading } = useAuth();
@@ -58,8 +59,8 @@ export default function ApplicantProfilePage() {
 
   if (loading || !user) return null;
 
-  return (
-    <Box maxW="600px" mx="auto" py={12} px={4}>
+    return (
+    <Box maxW="700px" mx="auto" py={12} px={4}>
       <Heading size="lg" color="text" mb={1}>Your Applicant Profile</Heading>
       <Text color="gray.600" mb={8}>
         Register your profile so employers can find and view you directly.
@@ -99,6 +100,8 @@ export default function ApplicantProfilePage() {
           </Button>
         </Stack>
       </Box>
+
+      <MyApplicationsTable />
     </Box>
   );
 }
