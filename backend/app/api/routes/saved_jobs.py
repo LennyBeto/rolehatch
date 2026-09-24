@@ -1,12 +1,13 @@
 # backend/app/api/routes/saved_jobs.py
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.db.session import get_db
 from app.core.security import get_current_user
 from app.models.job import SavedJob, Job, Company
-from app.schemas.saved_job import SavedJobCreate, SavedJobUpdate
+from app.schemas.saved_job import AppliedJobOut, SavedJobCreate, SavedJobUpdate
 
 router = APIRouter()
 

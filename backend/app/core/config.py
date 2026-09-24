@@ -1,4 +1,6 @@
 # backend/app/core/config.py
+import json
+
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -56,7 +58,22 @@ class Settings(BaseSettings):
     @classmethod
     def split_allowed_origins(cls, v):
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
+            stripped = v.strip()
+            if not stripped:
+                return []
+
+            try:
+                parsed = json.loads(stripped)
+                if isinstance(parsed, list):
+                    return [
+                        origin.strip()
+                        for origin in parsed
+                        if isinstance(origin, str) and origin.strip()
+                    ]
+            except json.JSONDecodeError:
+                pass
+
+            return [origin.strip() for origin in stripped.split(",") if origin.strip()]
         return v
 
 
