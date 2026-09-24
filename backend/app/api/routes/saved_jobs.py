@@ -42,6 +42,26 @@ def update_saved_job(job_id: str, payload: SavedJobUpdate, user=Depends(get_curr
 def list_saved_jobs(user=Depends(get_current_user), db: Session = Depends(get_db)):
     return db.query(SavedJob).filter_by(user_id=user["sub"]).all()
 
+# ── My Applications — jobs marked as "applied", with job/company details ──
+@router.get("/applications", response_model=list[AppliedJobOut])
+def list_applications(user=Depends(get_current_user), db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(
+            SavedJob.id.label("saved_job_id"),
+            Job.id.label("job_id"),
+            Job.title,
+            Company.name.label("company_name"),
+            Job.location,
+            Job.source_url,
+            SavedJob.created_at.label("applied_at"),
+        )
+        .join(Job, SavedJob.job_id == Job.id)
+        .join(Company, Job.company_id == Company.id, isouter=True)
+        .where(SavedJob.user_id == user["sub"], SavedJob.status == "applied")
+        .order_by(SavedJob.created_at.desc())
+    ).all()
+
+    return [dict(r._mapping) for r in rows]
 
 # ── NEW: personalized "My Applications" dashboard data ──
 @router.get("/applied")
