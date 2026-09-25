@@ -1,8 +1,15 @@
 // frontend/app/blog/BlogIndexClient.tsx
-"use client";
-import { Box, Heading, Text, Stack, Link as ChakraLink } from "@chakra-ui/react";
+import { Box, Heading, Text, Stack } from "@chakra-ui/react";
 import NextLink from "next/link";
 import { BLOG_POSTS } from "@/lib/blogPosts";
+
+const formatPublishedDate = (dateString: string) =>
+  new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(new Date(dateString));
 
 export default function BlogIndexClient() {
   return (
@@ -14,11 +21,11 @@ export default function BlogIndexClient() {
         {BLOG_POSTS.slice().reverse().map((post) => (
           <Box key={post.slug} borderBottom="1px solid #E5E3DD" pb={6}>
             <Text fontSize="xs" color="gray.500" mb={1}>
-              {new Date(post.publishedAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
+              {formatPublishedDate(post.publishedAt)}
             </Text>
-            <ChakraLink as={NextLink} href={`/blog/${post.slug}`}>
+            <NextLink href={`/blog/${post.slug}`} style={{ textDecoration: "none", color: "inherit" }}>
               <Heading size="md" color="text" mb={2}>{post.title}</Heading>
-            </ChakraLink>
+            </NextLink>
             <Text color="gray.600" fontSize="sm">{post.excerpt}</Text>
           </Box>
         ))}

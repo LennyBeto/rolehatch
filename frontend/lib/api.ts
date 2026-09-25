@@ -21,13 +21,11 @@ export const saveJob = (jobId: string) =>
 export const markApplied = (jobId: string) =>
   authedFetch(`/api/saved-jobs/${jobId}`, { method: "PATCH", body: JSON.stringify({ status: "applied" }) });
 
-export const getMyApplications = () =>
-   authedFetch("/api/saved-jobs/applications");
-
 export const hideJob = (jobId: string) =>
   authedFetch(`/api/saved-jobs/${jobId}`, { method: "PATCH", body: JSON.stringify({ status: "hidden" }) });
 
-export { authedFetch };
+export const getMyApplications = () =>
+  authedFetch("/api/saved-jobs/applications");
 
 export const upsertApplicantProfile = async (data: {
   firstName: string;
@@ -54,3 +52,5 @@ export const upsertApplicantProfile = async (data: {
 };
 
 export const getMyApplicantProfile = () => authedFetch("/api/applicants/me");
+
+export { authedFetch };

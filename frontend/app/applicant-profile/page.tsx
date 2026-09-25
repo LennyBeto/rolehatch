@@ -59,7 +59,7 @@ export default function ApplicantProfilePage() {
 
   if (loading || !user) return null;
 
-    return (
+   return (
     <Box maxW="700px" mx="auto" py={12} px={4}>
       <Heading size="lg" color="text" mb={1}>Your Applicant Profile</Heading>
       <Text color="gray.600" mb={8}>
