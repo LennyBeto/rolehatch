@@ -11,11 +11,11 @@ export default function SearchBar() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    // Preserve quick_filter/remote_type/salary_min etc. instead of merging
+    // quick_filter text into the free-text title (see HeroSection for why).
     const params = new URLSearchParams(searchParams.toString());
-    const quickFilter = searchParams.get("quick_filter");
     params.delete("page");
-    const combinedQuery = [query, quickFilter].filter(Boolean).join(" ");
-    if (combinedQuery) params.set("title", combinedQuery);
+    if (query) params.set("title", query);
     else params.delete("title");
     router.push(`/?${params.toString()}`);
   };

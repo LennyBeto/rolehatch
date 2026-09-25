@@ -29,11 +29,13 @@ export default function JobList() {
     setLoading(true);
     const params = new URLSearchParams();
     const title = searchParams.get("title");
+    const quickFilter = searchParams.get("quick_filter");
     const remoteType = searchParams.get("remote_type");
     const salaryMin = searchParams.get("salary_min");
     const location = searchParams.get("location");
 
     if (title) params.set("title", title);
+    if (quickFilter) params.set("quick_filter", quickFilter);
     if (remoteType) params.set("remote_type", remoteType);
     if (salaryMin) params.set("salary_min", salaryMin);
     if (location) params.set("location", location);

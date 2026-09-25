@@ -1,6 +1,5 @@
 # backend/app/api/routes/jobs.py
 import re
-import statistics
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func, or_, select
@@ -16,11 +15,9 @@ router = APIRouter()
 
 PAGE_SIZE = 15
 SEARCH_CACHE_TTL = 3300   # ~55 min — just under the hourly scrape cycle
-SALARY_INSIGHTS_CACHE_TTL = 3600  # 1 hr — matches scrape cadence, no point recomputing more often
 FACETS_CACHE_TTL = 1800
 STATS_CACHE_TTL = 1800
 JOB_DETAIL_CACHE_TTL = 3600
-SITEMAP_CACHE_TTL = 1800
 
 
 def build_search_query(
@@ -29,10 +26,8 @@ def build_search_query(
     title: str | None,
     salary_min: int | None,
     remote_type: str | None = None,
+    quick_filter: str | None = None,
 ):
-    # Column-level select instead of full ORM hydration — only pulls the
-    # fields actually returned to the frontend, skipping heavier columns
-    # like Job.external_id, Job.scraped_at, Company.industry, Company.board_token.
     q = (
         select(
             Job.id, Job.title, Job.location, Job.remote_type, Job.commitment,
@@ -49,7 +44,7 @@ def build_search_query(
     if title:
         title_variants = [
             part.strip()
-            for part in re.split(r"\s*(?:,|/|\||\band\b)\s*", title.lower())
+            for part in re.split(r"\s*(?:,|/|\band\b)\s*", title.lower())
             if part and part.strip()
         ]
         if not title_variants:
@@ -67,6 +62,19 @@ def build_search_query(
         title_filters.extend(Job.title.ilike(f"%{word}%") for word in words)
         if title_filters:
             q = q.where(or_(*title_filters))
+
+    if quick_filter:
+        # Strict OR-of-exact-phrases matching for the QuickFilterChips buttons.
+        # Deliberately does NOT explode multi-word phrases into individual
+        # word filters (that's what caused "AI/ML" to match on "learning"
+        # alone and return 200+ unrelated jobs). Each "|"-separated phrase
+        # (e.g. "artificial intelligence|machine learning") is matched as a
+        # whole against the title, so only jobs containing one of the full
+        # phrases match.
+        phrases = [p.strip().lower() for p in quick_filter.split("|") if p.strip()]
+        if phrases:
+            q = q.where(or_(*[Job.title.ilike(f"%{p}%") for p in phrases]))
+
     if salary_min:
         q = q.where(Job.salary_min >= salary_min)
     if remote_type:
@@ -113,20 +121,21 @@ def _serialize_row(row, now: datetime) -> dict:
 def search_jobs(
     location: str | None = None,
     title: str | None = None,
+    quick_filter: str | None = None,
     salary_min: int | None = None,
     remote_type: str | None = None,
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
 ):
     params = {
-        "location": location, "title": title, "salary_min": salary_min,
-        "remote_type": remote_type, "page": page,
+        "location": location, "title": title, "quick_filter": quick_filter,
+        "salary_min": salary_min, "remote_type": remote_type, "page": page,
     }
     key = cache_key("search", params)
     if (cached := get_cached(key)) is not None:
         return cached
 
-    base_query = build_search_query(db, location, title, salary_min, remote_type)
+    base_query = build_search_query(db, location, title, salary_min, remote_type, quick_filter)
 
     count_query = select(func.count()).select_from(base_query.order_by(None).subquery())
     total = db.execute(count_query).scalar_one()
@@ -146,57 +155,6 @@ def search_jobs(
     set_cached(key, results, ttl_seconds=SEARCH_CACHE_TTL)
     return results
 
-@router.get("/salary-insights")
-def get_salary_insights(
-    title: str = Query(..., min_length=1),
-    company_domain: str | None = None,
-    db: Session = Depends(get_db),
-):
-    """
-    Aggregated salary range for a role title, optionally scoped to one company.
-    Pulls from active listings that actually have salary data. Thin samples are
-    flagged (not hidden) so the frontend can decide how to present them.
-    """
-    params = {"title": title, "company_domain": company_domain}
-    key = cache_key("salary_insights", params)
-    if (cached := get_cached(key)) is not None:
-        return cached
-
-    q = (
-        select(Job.salary_min, Job.salary_max)
-        .join(Company, Job.company_id == Company.id)
-        .where(
-            Job.is_active.is_(True),
-            Job.salary_min.isnot(None),
-            Job.title.ilike(f"%{title}%"),
-        )
-    )
-    if company_domain:
-        q = q.where(func.lower(Company.domain) == company_domain.lower())
-
-    rows = db.execute(q).all()
-    mins = [float(r.salary_min) for r in rows if r.salary_min is not None]
-    maxs = [float(r.salary_max) for r in rows if r.salary_max is not None] or mins
-
-    if not mins:
-        result = {
-            "title": title, "company_domain": company_domain,
-            "sample_size": 0, "low_confidence": True,
-            "salary_min": None, "salary_median": None, "salary_max": None,
-        }
-    else:
-        result = {
-            "title": title,
-            "company_domain": company_domain,
-            "sample_size": len(mins),
-            "low_confidence": len(mins) < 3,  # fewer than 3 listings — don't trust the range
-            "salary_min": min(mins),
-            "salary_median": round(statistics.median(mins + maxs), 2),
-            "salary_max": max(maxs),
-        }
-
-    set_cached(key, result, ttl_seconds=SALARY_INSIGHTS_CACHE_TTL)
-    return result
 
 @router.get("/facets")
 def get_facets(db: Session = Depends(get_db)):
@@ -229,31 +187,6 @@ def get_platform_stats(db: Session = Depends(get_db)):
     set_cached(key, stats, ttl_seconds=STATS_CACHE_TTL)
     return stats
 
-@router.get("/sitemap-data")
-def get_sitemap_data(db: Session = Depends(get_db)):
-    """Lightweight {id, updated_at} listing of every active job, consumed by
-    the frontend's dynamic app/sitemap.ts. Kept separate from /search so we
-    don't page through 15-at-a-time or drag along heavy columns just to
-    build a sitemap."""
-    key = "sitemap:jobs"
-    if (cached := get_cached(key)) is not None:
-        return cached
-
-    rows = (
-        db.query(Job.id, Job.posted_at, Job.scraped_at)
-        .filter(Job.is_active.is_(True))
-        .all()
-    )
-    data = [
-        {
-            "id": str(r.id),
-            "updated_at": (r.scraped_at or r.posted_at).isoformat()
-            if (r.scraped_at or r.posted_at) else None,
-        }
-        for r in rows
-    ]
-    set_cached(key, data, ttl_seconds=SITEMAP_CACHE_TTL)
-    return data
 
 # ── Dynamic path last ──
 @router.get("/{job_id}")

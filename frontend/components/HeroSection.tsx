@@ -32,13 +32,20 @@ export default function HeroSection() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    const params = new URLSearchParams();
-    // Category is folded into the title keyword search until real category/tag
-    // data exists on jobs — see note below the component.
-    const quickFilter = searchParams.get("quick_filter");
-    const combinedTitle = [title, category[0], quickFilter].filter(Boolean).join(" ");
+    // Preserve existing params (quick_filter, remote_type, salary_min, etc.)
+    // instead of dropping/merging them into the free-text title — folding
+    // quick_filter into title reintroduced the broad word-split matching
+    // that made the quick filter chips return too many results.
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("page");
+
+    const combinedTitle = [title, category[0]].filter(Boolean).join(" ");
     if (combinedTitle) params.set("title", combinedTitle);
+    else params.delete("title");
+
     if (location) params.set("location", location);
+    else params.delete("location");
+
     router.push(`/?${params.toString()}#listings`);
   };
 
