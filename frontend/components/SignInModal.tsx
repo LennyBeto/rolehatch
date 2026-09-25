@@ -15,7 +15,14 @@ export default function SignInModal({ isOpen, onClose }: { isOpen: boolean; onCl
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) {
-      toaster.create({ title: "Couldn't send link", description: error.message, type: "error" });
+      const isRateLimited = error.message.toLowerCase().includes("rate limit");
+      toaster.create({
+        title: isRateLimited ? "Too many sign-in attempts" : "Couldn't send link",
+        description: isRateLimited
+          ? "You've requested too many magic links recently. Please wait a few minutes and try again."
+          : error.message,
+        type: "error",
+      });
       return;
     }
     setSent(true);
