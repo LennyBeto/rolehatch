@@ -7,7 +7,10 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
-from app.api.routes import jobs, saved_jobs, promote, internal, job_alerts, companies, employer_jobs, contact, applicant_profile
+from app.api.routes import (
+    jobs, saved_jobs, promote, internal, job_alerts, companies,
+    employer_jobs, contact, applicant_profile,
+)
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="PerchRole API")
