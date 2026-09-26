@@ -77,13 +77,15 @@ export default function HeroSection() {
         mx="auto"
         border="1px solid #E5E3DD"
       >
-        <Flex direction={{ base: "column", md: "row" }} gap={3}>
+        <Flex direction={{ base: "column", md: "row" }} gap={3} w="full">
           <Input
             placeholder="Job title or keyword"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             size="lg"
             flex={2}
+            minW={0}
+            w="full"
           />
           <Input
             placeholder="Location or Remote"
@@ -91,6 +93,8 @@ export default function HeroSection() {
             onChange={(e) => setLocation(e.target.value)}
             size="lg"
             flex={1}
+            minW={0}
+            w="full"
           />
           <Select.Root
             collection={CATEGORIES}
@@ -98,6 +102,8 @@ export default function HeroSection() {
             onValueChange={(e) => setCategory(e.value)}
             size="lg"
             flex={1}
+            minW={0}
+            w="full"
           >
             <Select.Control>
               <Select.Trigger>
@@ -116,13 +122,20 @@ export default function HeroSection() {
               </Select.Positioner>
             </Portal>
           </Select.Root>
-          <Button type="submit" colorPalette="brand" size="lg" px={8}>
+          <Button
+            type="submit"
+            colorPalette="brand"
+            size="lg"
+            px={8}
+            w={{ base: "full", md: "auto" }}
+            flexShrink={0}
+          >
             Find Jobs
           </Button>
         </Flex>
       </Box>
 
-      <HStack justify="center" gap={4} mt={8}>
+      <HStack justify="center" gap={4} mt={8} flexWrap="wrap">
         <Button
           asChild
           variant="outline"
