@@ -209,8 +209,8 @@ export default function Header() {
                   <Box as="a" href="/#listings" display="block" px={4} py={2} fontSize="sm" color="text" _hover={{ bg: "background" }}>
                     Find Jobs
                   </Box>
-                  <Box as="a" href="/#listings" display="block" px={4} py={2} fontSize="sm" color="text" _hover={{ bg: "background" }}>
-                    Saved Jobs
+                  <Box as="a" href="/applicant/dashboard" display="block" px={4} py={2} fontSize="sm" color="text" _hover={{ bg: "background" }}>
+                    Dashboard
                   </Box>
 
                   <Box borderTop="1px solid #E5E3DD" my={2} />
