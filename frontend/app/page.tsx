@@ -19,7 +19,16 @@ export default function HomePage() {
           <QuickFilterChips />
         </Box>
         <Flex id="listings" maxW="1200px" mx="auto" gap={6} px={4} pb={10} scrollMarginTop="80px">
-          <Box w="280px" flexShrink={0} display={{ base: "none", md: "block" }}>
+          <Box
+            w="280px"
+            flexShrink={0}
+            display={{ base: "none", md: "block" }}
+            position="sticky"
+            top="80px"
+            alignSelf="flex-start"
+            maxH="calc(100vh - 96px)"
+            overflowY="auto"
+          >
             <FilterSidebar />
           </Box>
           <Box flex="1">
