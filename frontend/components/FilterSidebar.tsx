@@ -1,7 +1,7 @@
 // frontend/components/FilterSidebar.tsx
 "use client";
 import {
-  Box, Heading, CheckboxGroup, Checkbox, VStack, Slider, Text,
+  Box, Heading, CheckboxGroup, Checkbox, VStack, Slider, Text, Wrap,
 } from "@chakra-ui/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDebouncedCallback } from "@/lib/useDebouncedCallback";
@@ -13,11 +13,27 @@ const REMOTE_TYPES = [
   { label: "Field", value: "field" },
 ];
 
+const LANGUAGES = [
+  { label: "Python", value: "python" },
+  { label: "JavaScript", value: "javascript" },
+  { label: "TypeScript", value: "typescript" },
+  { label: "Java", value: "java" },
+  { label: "Go", value: "go" },
+  { label: "Rust", value: "rust" },
+  { label: "C#", value: "c#" },
+  { label: "Ruby", value: "ruby" },
+  { label: "PHP", value: "php" },
+  { label: "Swift", value: "swift" },
+  { label: "Kotlin", value: "kotlin" },
+  { label: "SQL", value: "sql" },
+];
+
 export default function FilterSidebar() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const selectedRemoteTypes = searchParams.get("remote_type")?.split(",").map((v) => v.trim().toLowerCase()).filter(Boolean) ?? [];
+  const selectedLanguages = searchParams.get("language")?.split(",").map((v) => v.trim().toLowerCase()).filter(Boolean) ?? [];
   const salaryMin = Number(searchParams.get("salary_min") ?? 0);
   const salaryMax = Number(searchParams.get("salary_max") ?? 200);
 
@@ -34,6 +50,11 @@ export default function FilterSidebar() {
   const handleRemoteTypeChange = (values: string[]) => {
     const normalized = values.map((value) => value.trim().toLowerCase()).filter(Boolean);
     updateParams({ remote_type: normalized.length ? normalized.join(",") : null });
+  };
+
+  const handleLanguageChange = (values: string[]) => {
+    const normalized = values.map((value) => value.trim().toLowerCase()).filter(Boolean);
+    updateParams({ language: normalized.length ? normalized.join(",") : null });
   };
 
   const handleSalaryChange = (value: number[]) => {
@@ -61,6 +82,23 @@ export default function FilterSidebar() {
             </Checkbox.Root>
           ))}
         </VStack>
+      </CheckboxGroup>
+
+      <Heading size="sm" mb={3}>Languages</Heading>
+      <CheckboxGroup
+        colorPalette="brand"
+        value={selectedLanguages}
+        onValueChange={handleLanguageChange}
+      >
+        <Wrap gap={3} mb={5}>
+          {LANGUAGES.map((lang) => (
+            <Checkbox.Root key={lang.value} value={lang.value}>
+              <Checkbox.HiddenInput />
+              <Checkbox.Control />
+              <Checkbox.Label>{lang.label}</Checkbox.Label>
+            </Checkbox.Root>
+          ))}
+        </Wrap>
       </CheckboxGroup>
 
       <Heading size="sm" mb={3}>Salary ($k/yr)</Heading>

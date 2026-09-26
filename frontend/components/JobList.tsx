@@ -25,20 +25,20 @@ export default function JobList() {
 
   const currentPage = Number(searchParams.get("page") ?? 1);
 
-  useEffect(() => {
+   useEffect(() => {
     setLoading(true);
     const params = new URLSearchParams();
     const title = searchParams.get("title");
-    const quickFilter = searchParams.get("quick_filter");
     const remoteType = searchParams.get("remote_type");
     const salaryMin = searchParams.get("salary_min");
     const location = searchParams.get("location");
+    const language = searchParams.get("language");
 
     if (title) params.set("title", title);
-    if (quickFilter) params.set("quick_filter", quickFilter);
     if (remoteType) params.set("remote_type", remoteType);
     if (salaryMin) params.set("salary_min", salaryMin);
     if (location) params.set("location", location);
+    if (language) params.set("language", language);
     params.set("page", String(currentPage));
 
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/jobs/search?${params.toString()}`)

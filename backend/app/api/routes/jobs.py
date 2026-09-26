@@ -26,8 +26,11 @@ def build_search_query(
     title: str | None,
     salary_min: int | None,
     remote_type: str | None = None,
-    quick_filter: str | None = None,
+    language: str | None = None,
 ):
+    # Column-level select instead of full ORM hydration — only pulls the
+    # fields actually returned to the frontend, skipping heavier columns
+    # like Job.external_id, Job.scraped_at, Company.industry, Company.board_token.
     q = (
         select(
             Job.id, Job.title, Job.location, Job.remote_type, Job.commitment,
@@ -44,7 +47,7 @@ def build_search_query(
     if title:
         title_variants = [
             part.strip()
-            for part in re.split(r"\s*(?:,|/|\band\b)\s*", title.lower())
+            for part in re.split(r"\s*(?:,|/|\||\band\b)\s*", title.lower())
             if part and part.strip()
         ]
         if not title_variants:
@@ -62,25 +65,18 @@ def build_search_query(
         title_filters.extend(Job.title.ilike(f"%{word}%") for word in words)
         if title_filters:
             q = q.where(or_(*title_filters))
-
-    if quick_filter:
-        # Strict OR-of-exact-phrases matching for the QuickFilterChips buttons.
-        # Deliberately does NOT explode multi-word phrases into individual
-        # word filters (that's what caused "AI/ML" to match on "learning"
-        # alone and return 200+ unrelated jobs). Each "|"-separated phrase
-        # (e.g. "artificial intelligence|machine learning") is matched as a
-        # whole against the title, so only jobs containing one of the full
-        # phrases match.
-        phrases = [p.strip().lower() for p in quick_filter.split("|") if p.strip()]
-        if phrases:
-            q = q.where(or_(*[Job.title.ilike(f"%{p}%") for p in phrases]))
-
     if salary_min:
         q = q.where(Job.salary_min >= salary_min)
     if remote_type:
         types = [t.strip().lower() for t in remote_type.split(",") if t.strip()]
         if types:
             q = q.where(func.lower(Job.remote_type).in_(types))
+    if language:
+        langs = [l.strip().lower() for l in language.split(",") if l.strip()]
+        if langs:
+            # tech_stack values are stored lowercase (see pipeline.py TECH_KEYWORDS),
+            # so a Postgres ARRAY overlap check is a direct, index-friendly match.
+            q = q.where(Job.tech_stack.overlap(langs))
 
     is_featured_now = case(
         (Job.featured_until.isnot(None) & (Job.featured_until > datetime.now(timezone.utc)), 0),
@@ -121,21 +117,21 @@ def _serialize_row(row, now: datetime) -> dict:
 def search_jobs(
     location: str | None = None,
     title: str | None = None,
-    quick_filter: str | None = None,
     salary_min: int | None = None,
     remote_type: str | None = None,
+    language: str | None = None,
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
 ):
     params = {
-        "location": location, "title": title, "quick_filter": quick_filter,
-        "salary_min": salary_min, "remote_type": remote_type, "page": page,
+        "location": location, "title": title, "salary_min": salary_min,
+        "remote_type": remote_type, "language": language, "page": page,
     }
     key = cache_key("search", params)
     if (cached := get_cached(key)) is not None:
         return cached
 
-    base_query = build_search_query(db, location, title, salary_min, remote_type, quick_filter)
+    base_query = build_search_query(db, location, title, salary_min, remote_type, language)
 
     count_query = select(func.count()).select_from(base_query.order_by(None).subquery())
     total = db.execute(count_query).scalar_one()
