@@ -1,23 +1,36 @@
 // frontend/components/Header.tsx
 "use client";
-import { Flex, Heading, HStack, Button, Text, Menu, Portal, Avatar, IconButton, Link as ChakraLink } from "@chakra-ui/react";
+import { Flex, Heading, HStack, Button, Text, Box, Avatar, IconButton } from "@chakra-ui/react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { FaDiscord } from "react-icons/fa";
 import Logo from "./Logo";
 import { ColorModeButton } from "@/components/ui/color-mode";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import SignInModal from "./SignInModal";
-import { FaDiscord } from "react-icons/fa";
 
-const DISCORD_INVITE_URL = "https://discord.gg/YOUR_INVITE_CODE"; // replace with your PerchRole Tech Hub invite link
+const HOVER_CLOSE_DELAY_MS = 150;
+const DISCORD_INVITE_URL = "https://discord.gg/4Pa4E96j2";
 
 export default function Header() {
   const { user } = useAuth();
   const [modalOpen, setModalOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
+  };
+
+  const openMenu = () => {
+    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    setMenuOpen(true);
+  };
+
+  const scheduleCloseMenu = () => {
+    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    closeTimeoutRef.current = setTimeout(() => setMenuOpen(false), HOVER_CLOSE_DELAY_MS);
   };
 
   return (
@@ -53,48 +66,83 @@ export default function Header() {
         </Flex>
 
         <HStack gap={3} flexShrink={0}>
-          <ChakraLink
-            href={DISCORD_INVITE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            _hover={{ textDecoration: "none" }}
+          <IconButton
+            asChild
+            variant="ghost"
+            aria-label="Join our Discord"
+            size="sm"
           >
-            <IconButton
-              aria-label="Join PerchRole on Discord"
-              variant="ghost"
-              size="sm"
-              color="gray.600"
-              _hover={{ color: "#5865F2" }} // Discord brand blurple on hover
-            >
+            <a href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer">
               <FaDiscord size={18} />
-            </IconButton>
-          </ChakraLink>
+            </a>
+          </IconButton>
 
           <ColorModeButton />
 
           {user ? (
-            <Menu.Root>
-              <Menu.Trigger asChild>
-                <Avatar.Root size="sm" cursor="pointer">
-                  <Avatar.Fallback name={user.email ?? "User"} />
-                </Avatar.Root>
-              </Menu.Trigger>
-              <Portal>
-                <Menu.Positioner>
-                  <Menu.Content>
-                    <Menu.Item value="post-job" asChild>
-                      <a href="/post-job">Post a Job</a>
-                    </Menu.Item>
-                    <Menu.Item value="dashboard" asChild>
-                      <a href="/dashboard">Dashboard</a>
-                    </Menu.Item>
-                    <Menu.Item value="signout" onClick={handleSignOut}>
-                      Sign Out
-                    </Menu.Item>
-                  </Menu.Content>
-                </Menu.Positioner>
-              </Portal>
-            </Menu.Root>
+            <Box
+              position="relative"
+              onMouseEnter={openMenu}
+              onMouseLeave={scheduleCloseMenu}
+            >
+              <Avatar.Root size="sm" cursor="pointer">
+                <Avatar.Fallback name={user.email ?? "User"} />
+              </Avatar.Root>
+
+              {menuOpen && (
+                <Box
+                  position="absolute"
+                  top="calc(100% + 8px)"
+                  right={0}
+                  bg="surface"
+                  border="1px solid #E5E3DD"
+                  borderRadius="md"
+                  boxShadow="0 8px 24px rgba(0,0,0,0.12)"
+                  minW="200px"
+                  py={2}
+                  zIndex={20}
+                >
+                  <Text px={4} pt={1} pb={2} fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase" letterSpacing="wide">
+                    Applicant
+                  </Text>
+                  <Box as="a" href="/#listings" display="block" px={4} py={2} fontSize="sm" color="text" _hover={{ bg: "background" }}>
+                    Find Jobs
+                  </Box>
+                  <Box as="a" href="/#listings" display="block" px={4} py={2} fontSize="sm" color="text" _hover={{ bg: "background" }}>
+                    Saved Jobs
+                  </Box>
+
+                  <Box borderTop="1px solid #E5E3DD" my={2} />
+
+                  <Text px={4} pt={1} pb={2} fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase" letterSpacing="wide">
+                    Employer
+                  </Text>
+                  <Box as="a" href="/post-job" display="block" px={4} py={2} fontSize="sm" color="text" _hover={{ bg: "background" }}>
+                    Post a Job
+                  </Box>
+                  <Box as="a" href="/dashboard" display="block" px={4} py={2} fontSize="sm" color="text" _hover={{ bg: "background" }}>
+                    Dashboard
+                  </Box>
+
+                  <Box borderTop="1px solid #E5E3DD" my={2} />
+
+                  <Box
+                    as="button"
+                    display="block"
+                    w="full"
+                    textAlign="left"
+                    px={4}
+                    py={2}
+                    fontSize="sm"
+                    color="red.500"
+                    _hover={{ bg: "background" }}
+                    onClick={handleSignOut}
+                  >
+                    Sign Out
+                  </Box>
+                </Box>
+              )}
+            </Box>
           ) : (
             <>
               <Text
