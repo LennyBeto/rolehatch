@@ -27,6 +27,7 @@ def build_search_query(
     salary_min: int | None,
     remote_type: str | None = None,
     language: str | None = None,
+    quick_filter: str | None = None,
 ):
     # Column-level select instead of full ORM hydration — only pulls the
     # fields actually returned to the frontend, skipping heavier columns
@@ -65,6 +66,18 @@ def build_search_query(
         title_filters.extend(Job.title.ilike(f"%{word}%") for word in words)
         if title_filters:
             q = q.where(or_(*title_filters))
+
+    if quick_filter:
+        # QuickFilterChips buttons — strict OR-of-exact-phrases, no word
+        # exploding. This is deliberately separate from the `title` branch
+        # above: title's word-splitting is what let "AI/ML" match on the
+        # bare word "learning" and return 200+ unrelated jobs. Each
+        # "|"-separated phrase (e.g. "artificial intelligence|machine
+        # learning") is matched as a whole phrase only.
+        phrases = [p.strip().lower() for p in quick_filter.split("|") if p.strip()]
+        if phrases:
+            q = q.where(or_(*[Job.title.ilike(f"%{p}%") for p in phrases]))
+
     if salary_min:
         q = q.where(Job.salary_min >= salary_min)
     if remote_type:
@@ -120,18 +133,22 @@ def search_jobs(
     salary_min: int | None = None,
     remote_type: str | None = None,
     language: str | None = None,
+    quick_filter: str | None = None,
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
 ):
     params = {
         "location": location, "title": title, "salary_min": salary_min,
-        "remote_type": remote_type, "language": language, "page": page,
+        "remote_type": remote_type, "language": language,
+        "quick_filter": quick_filter, "page": page,
     }
     key = cache_key("search", params)
     if (cached := get_cached(key)) is not None:
         return cached
 
-    base_query = build_search_query(db, location, title, salary_min, remote_type, language)
+    base_query = build_search_query(
+        db, location, title, salary_min, remote_type, language, quick_filter
+    )
 
     count_query = select(func.count()).select_from(base_query.order_by(None).subquery())
     total = db.execute(count_query).scalar_one()
