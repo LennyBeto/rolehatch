@@ -7,6 +7,7 @@ import {
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
+import { useNotifications } from "@/lib/NotificationContext";
 import { authedFetch } from "@/lib/api";
 import { toaster } from "@/components/ui/toaster";
 
@@ -29,6 +30,7 @@ const COMMITMENTS = createListCollection({
 
 export default function PostJobPage() {
   const { user, loading } = useAuth();
+  const { addNotification } = useNotifications();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
 
@@ -74,6 +76,7 @@ export default function PostJobPage() {
         throw new Error(err?.detail?.[0]?.msg || err?.detail || "Failed to post job");
       }
       toaster.create({ title: "Job posted!", description: "Your listing is now live.", type: "success" });
+      addNotification(`"${title}" is now live on PerchRole.`);
       router.push("/dashboard");
     } catch (err) {
       toaster.create({
