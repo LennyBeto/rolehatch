@@ -4,20 +4,36 @@ import { Flex, Heading, HStack, Button, Text, Box, Avatar, IconButton } from "@c
 import Link from "next/link";
 import { useState, useRef } from "react";
 import { FaDiscord } from "react-icons/fa";
+import { LuBell } from "react-icons/lu";
 import Logo from "./Logo";
 import { ColorModeButton } from "@/components/ui/color-mode";
 import { useAuth } from "@/lib/AuthContext";
+import { useNotifications } from "@/lib/NotificationContext";
 import { supabase } from "@/lib/supabaseClient";
 import SignInModal from "./SignInModal";
 
 const HOVER_CLOSE_DELAY_MS = 150;
 const DISCORD_INVITE_URL = "https://discord.gg/4Pa4E96j2";
 
+function formatNotificationTime(iso: string) {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
+
 export default function Header() {
   const { user } = useAuth();
+  const { notifications, unreadCount, markAllRead } = useNotifications();
   const [modalOpen, setModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bellCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -31,6 +47,17 @@ export default function Header() {
   const scheduleCloseMenu = () => {
     if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
     closeTimeoutRef.current = setTimeout(() => setMenuOpen(false), HOVER_CLOSE_DELAY_MS);
+  };
+
+  const openBell = () => {
+    if (bellCloseTimeoutRef.current) clearTimeout(bellCloseTimeoutRef.current);
+    setBellOpen(true);
+    markAllRead();
+  };
+
+  const scheduleCloseBell = () => {
+    if (bellCloseTimeoutRef.current) clearTimeout(bellCloseTimeoutRef.current);
+    bellCloseTimeoutRef.current = setTimeout(() => setBellOpen(false), HOVER_CLOSE_DELAY_MS);
   };
 
   return (
@@ -76,6 +103,80 @@ export default function Header() {
               <FaDiscord size={18} />
             </a>
           </IconButton>
+
+          {user && (
+            <Box
+              position="relative"
+              onMouseEnter={openBell}
+              onMouseLeave={scheduleCloseBell}
+            >
+              <IconButton
+                variant="ghost"
+                aria-label="Notifications"
+                size="sm"
+                position="relative"
+              >
+                <LuBell size={18} />
+                {unreadCount > 0 && (
+                  <Box
+                    position="absolute"
+                    top="4px"
+                    right="4px"
+                    bg="red.500"
+                    color="white"
+                    borderRadius="full"
+                    fontSize="10px"
+                    fontWeight="700"
+                    minW="16px"
+                    h="16px"
+                    px="3px"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    lineHeight="1"
+                  >
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </Box>
+                )}
+              </IconButton>
+
+              {bellOpen && (
+                <Box
+                  position="absolute"
+                  top="calc(100% + 8px)"
+                  right={0}
+                  bg="surface"
+                  border="1px solid #E5E3DD"
+                  borderRadius="md"
+                  boxShadow="0 8px 24px rgba(0,0,0,0.12)"
+                  minW="300px"
+                  maxW="360px"
+                  maxH="360px"
+                  overflowY="auto"
+                  py={2}
+                  zIndex={20}
+                >
+                  <Text px={4} pt={1} pb={2} fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase" letterSpacing="wide">
+                    Notifications
+                  </Text>
+                  {notifications.length === 0 ? (
+                    <Text px={4} py={3} fontSize="sm" color="gray.500">
+                      Nothing yet — activity on your jobs will show up here.
+                    </Text>
+                  ) : (
+                    notifications.map((n) => (
+                      <Box key={n.id} px={4} py={2} _hover={{ bg: "background" }}>
+                        <Text fontSize="sm" color="text">{n.message}</Text>
+                        <Text fontSize="xs" color="gray.500" mt={0.5}>
+                          {formatNotificationTime(n.createdAt)}
+                        </Text>
+                      </Box>
+                    ))
+                  )}
+                </Box>
+              )}
+            </Box>
+          )}
 
           <ColorModeButton />
 
