@@ -8,16 +8,31 @@ from app.core.config import settings
 bearer_scheme = HTTPBearer()
 
 
-async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
-    token = creds.credentials
+def _decode_locally(token: str) -> dict | None:
+    """Standard path: verify the shared-secret HS256 signature Supabase
+    uses by default. Fast, no network call, and correct for the vast
+    majority of projects — this should succeed for any normally-configured
+    project and any token that hasn't actually expired."""
+    try:
+        return jwt.decode(
+            token,
+            settings.supabase_jwt_secret,
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+    except JWTError:
+        return None
 
-    # Primary path: ask Supabase's own Auth server to validate the token.
-    # This works regardless of whether the project signs tokens with the
-    # legacy shared HS256 secret or the newer per-project asymmetric keys —
-    # so it can't fail just because of a local secret/algorithm mismatch,
-    # which is what was causing every request to be rejected as "invalid"
-    # immediately, not just after real expiry.
-    apikey = settings.supabase_service_role_key or settings.supabase_jwt_secret
+
+async def _verify_via_supabase(token: str) -> dict | None:
+    """Fallback path for projects using asymmetric (per-project key) token
+    signing, where a local HS256 decode can never succeed regardless of
+    whether the token is actually valid. Must use the anon/public API key
+    here — NOT the JWT secret, which Supabase's Auth API will reject as an
+    invalid apikey and return 401/403 for, unrelated to the token itself."""
+    apikey = settings.supabase_anon_key or settings.supabase_service_role_key
+    if not apikey:
+        return None
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             resp = await client.get(
@@ -27,21 +42,20 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer_
         if resp.status_code == 200:
             data = resp.json()
             return {"sub": data["id"], "email": data.get("email", "")}
-        if resp.status_code in (401, 403):
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")
     except httpx.HTTPError:
-        pass  # Supabase unreachable — fall through to local verification below
+        pass
+    return None
 
-    # Fallback: local HS256 decode, kept for environments still using the
-    # legacy shared JWT secret, or if the Auth server call above can't be
-    # reached (e.g. offline dev).
-    try:
-        payload = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
+
+async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    token = creds.credentials
+
+    payload = _decode_locally(token)
+    if payload is not None:
         return payload
-    except JWTError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")
+
+    payload = await _verify_via_supabase(token)
+    if payload is not None:
+        return payload
+
+    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")
