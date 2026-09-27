@@ -1,3 +1,4 @@
+# backend/alembic/env.py
 import os
 from logging.config import fileConfig
 from pathlib import Path
@@ -11,7 +12,7 @@ from app.db.base import Base
 from app.models.job import Company, Job, SavedJob  # noqa: ensures models are registered
 from app.models.job_alert import JobAlert
 from app.models.contact_message import ContactMessage
-from app.models.applicant_profile import ApplicantProfile  # noqa: ensures model is registered
+from app.models.applicant_profile import ApplicantProfile
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
