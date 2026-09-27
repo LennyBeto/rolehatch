@@ -1,6 +1,4 @@
 # backend/app/core/config.py
-import json
-
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,6 +15,12 @@ class Settings(BaseSettings):
     supabase_url: str = Field(..., description="Supabase URL", alias="SUPABASE_URL")
     supabase_jwt_secret: str = Field(
         ..., description="Supabase JWT Secret", alias="SUPABASE_JWT_SECRET"
+    )
+    supabase_anon_key: str = Field(
+        default="",
+        description="Supabase anon/public API key — required for verifying tokens "
+        "against the Supabase Auth API as a fallback to local JWT decode",
+        alias="SUPABASE_ANON_KEY",
     )
     supabase_service_role_key: str = Field(
         default="",
@@ -44,11 +48,6 @@ class Settings(BaseSettings):
         alias="ALLOWED_ORIGINS",
     )
     scheduler_secret: str = Field(..., description="Scheduler Secret", alias="SCHEDULER_SECRET")
-    revalidate_secret: str = Field(
-        default="",
-        description="Shared secret for triggering frontend on-demand revalidation after a sync run",
-        alias="REVALIDATE_SECRET",
-    )
     db_pool_size: int = Field(default=10, description="SQLAlchemy DB pool size", alias="DB_POOL_SIZE")
     db_max_overflow: int = Field(default=20, description="SQLAlchemy DB max overflow", alias="DB_MAX_OVERFLOW")
     db_pool_timeout: int = Field(default=30, description="SQLAlchemy DB pool timeout", alias="DB_POOL_TIMEOUT")
@@ -57,23 +56,11 @@ class Settings(BaseSettings):
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def split_allowed_origins(cls, v):
+        # .env stores this as a plain comma-separated string, e.g.
+        # ALLOWED_ORIGINS=https://rolehatch.com,https://www.rolehatch.com
+        # — without this, Pydantic tries to JSON-decode it and raises on import.
         if isinstance(v, str):
-            stripped = v.strip()
-            if not stripped:
-                return []
-
-            try:
-                parsed = json.loads(stripped)
-                if isinstance(parsed, list):
-                    return [
-                        origin.strip()
-                        for origin in parsed
-                        if isinstance(origin, str) and origin.strip()
-                    ]
-            except json.JSONDecodeError:
-                pass
-
-            return [origin.strip() for origin in stripped.split(",") if origin.strip()]
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
 
 
