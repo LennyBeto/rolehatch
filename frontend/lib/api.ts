@@ -3,6 +3,16 @@ import { supabase } from "./supabaseClient";
 
 const TOKEN_REFRESH_MARGIN_SECONDS = 60;
 
+let refreshPromise: ReturnType<typeof supabase.auth.refreshSession> | null = null;
+function refreshSessionOnce() {
+  if (!refreshPromise) {
+    refreshPromise = supabase.auth.refreshSession().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
 async function getFreshAccessToken(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Not signed in");
@@ -13,17 +23,35 @@ async function getFreshAccessToken(): Promise<string> {
 
   if (!isStale) return session.access_token;
 
-  const { data: refreshed, error } = await supabase.auth.refreshSession();
+  const { data: refreshed, error } = await refreshSessionOnce();
   if (error || !refreshed.session) {
-    throw new Error("Not signed in");
+    // Refresh genuinely failed — return the token we have rather than
+    // giving up. The request itself will surface a normal error if the
+    // token really is unusable, without us pre-emptively signing out.
+    return session.access_token;
   }
   return refreshed.session.access_token;
 }
 
-async function authedFetch(path: string, options: RequestInit = {}) {
-  const accessToken = await getFreshAccessToken();
+async function withFreshTokenRetry(doRequest: (token: string) => Promise<Response>): Promise<Response> {
+  const token = await getFreshAccessToken();
+  let res = await doRequest(token);
 
-  const doFetch = (token: string) =>
+  // One retry with a forced refresh if the server rejects the token —
+  // no sign-out, no redirect. If it still fails, we just return the
+  // response and let the caller show its normal "couldn't load" message.
+  if (res.status === 401) {
+    const { data: refreshed } = await refreshSessionOnce();
+    if (refreshed.session) {
+      res = await doRequest(refreshed.session.access_token);
+    }
+  }
+
+  return res;
+}
+
+async function authedFetch(path: string, options: RequestInit = {}) {
+  return withFreshTokenRetry((token) =>
     fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
       ...options,
       headers: {
@@ -31,22 +59,8 @@ async function authedFetch(path: string, options: RequestInit = {}) {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-    });
-
-  let res = await doFetch(accessToken);
-
-  // Defensive retry: if the server still rejects the token (clock skew,
-  // a refresh race, etc.), force one more refresh and try again before
-  // giving up — this is what eliminates the "Invalid or expired token"
-  // errors seen on dashboard load, profile load/save, and CV upload.
-  if (res.status === 401) {
-    const { data: refreshed } = await supabase.auth.refreshSession();
-    if (refreshed.session) {
-      res = await doFetch(refreshed.session.access_token);
-    }
-  }
-
-  return res;
+    })
+  );
 }
 
 export const saveJob = (jobId: string) =>
@@ -75,28 +89,16 @@ export const updateApplicantProfile = (payload: {
 }) => authedFetch("/api/applicant/profile", { method: "PUT", body: JSON.stringify(payload) });
 
 export const uploadApplicantCV = async (file: File) => {
-  const accessToken = await getFreshAccessToken();
-
   const form = new FormData();
   form.append("file", file);
 
-  const doUpload = (token: string) =>
+  return withFreshTokenRetry((token) =>
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/applicant/profile/cv`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: form,
-    });
-
-  let res = await doUpload(accessToken);
-
-  if (res.status === 401) {
-    const { data: refreshed } = await supabase.auth.refreshSession();
-    if (refreshed.session) {
-      res = await doUpload(refreshed.session.access_token);
-    }
-  }
-
-  return res;
+    })
+  );
 };
 
 export const scanApplicantCV = () =>
