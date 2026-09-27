@@ -1,7 +1,7 @@
 // frontend/app/applicant/dashboard/page.tsx
 "use client";
 import { Box, Heading, Text, Stack, Badge, Button, HStack, Center, Spinner } from "@chakra-ui/react";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { useRouter } from "next/navigation";
 import { authedFetch, saveJob, markApplied, hideJob, getApplicantProfile, ApplicantProfile } from "@/lib/api";
@@ -36,6 +36,7 @@ const TABS: { key: SavedJobEntry["status"]; label: string }[] = [
 
 export default function ApplicantDashboard() {
   const { user, loading } = useAuth();
+  const userId = user?.id ?? null;
   const router = useRouter();
   const [entries, setEntries] = useState<EnrichedEntry[]>([]);
   const [fetching, setFetching] = useState(true);
@@ -48,12 +49,18 @@ export default function ApplicantDashboard() {
   const [avatarId, setAvatarId] = useState<string | null>(null);
   const [cvFilename, setCvFilename] = useState<string | null>(null);
 
+  // Prevents overlapping calls if this effect is invoked again in quick
+  // succession (e.g. React Strict Mode's dev double-invoke).
+  const profileInFlightRef = useRef(false);
+  const savedJobsInFlightRef = useRef(false);
+
   useEffect(() => {
     if (!loading && !user) router.replace("/");
   }, [loading, user, router]);
 
   const loadProfile = useCallback(async () => {
-    if (!user) return;
+    if (!userId || profileInFlightRef.current) return;
+    profileInFlightRef.current = true;
     setProfileLoading(true);
     try {
       const res = await getApplicantProfile();
@@ -67,16 +74,19 @@ export default function ApplicantDashboard() {
       toaster.create({ title: "Couldn't load your profile", type: "error" });
     } finally {
       setProfileLoading(false);
+      profileInFlightRef.current = false;
     }
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
 
-  // --- Existing saved/applied/hidden logic — unchanged ---
+  // --- Existing saved/applied/hidden logic — unchanged apart from the
+  // dependency and in-flight guard below ---
   const loadSavedJobs = useCallback(async () => {
-    if (!user) return;
+    if (!userId || savedJobsInFlightRef.current) return;
+    savedJobsInFlightRef.current = true;
     setFetching(true);
     try {
       const res = await authedFetch("/api/saved-jobs");
@@ -100,8 +110,9 @@ export default function ApplicantDashboard() {
       toaster.create({ title: "Couldn't load your dashboard", type: "error" });
     } finally {
       setFetching(false);
+      savedJobsInFlightRef.current = false;
     }
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
     loadSavedJobs();
