@@ -24,33 +24,37 @@ export const markApplied = (jobId: string) =>
 export const hideJob = (jobId: string) =>
   authedFetch(`/api/saved-jobs/${jobId}`, { method: "PATCH", body: JSON.stringify({ status: "hidden" }) });
 
-export const getMyApplications = () =>
-  authedFetch("/api/saved-jobs/applications");
+export type ApplicantProfile = {
+  full_name: string | null;
+  expertise: string | null;
+  avatar_id: string | null;
+  cv_filename: string | null;
+  last_ats_score: number | null;
+};
 
-export const upsertApplicantProfile = async (data: {
-  firstName: string;
-  lastName: string;
-  jobTitle: string;
-  isPublic: boolean;
-  cv?: File | null;
-}) => {
+export const getApplicantProfile = () => authedFetch("/api/applicant/profile");
+
+export const updateApplicantProfile = (payload: {
+  full_name?: string;
+  expertise?: string;
+  avatar_id?: string;
+}) => authedFetch("/api/applicant/profile", { method: "PUT", body: JSON.stringify(payload) });
+
+export const uploadApplicantCV = async (file: File) => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Not signed in");
 
   const form = new FormData();
-  form.append("first_name", data.firstName);
-  form.append("last_name", data.lastName);
-  form.append("job_title", data.jobTitle);
-  form.append("is_public", String(data.isPublic));
-  if (data.cv) form.append("cv", data.cv);
+  form.append("file", file);
 
-  return fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/applicants/me`, {
+  return fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/applicant/profile/cv`, {
     method: "POST",
     headers: { Authorization: `Bearer ${session.access_token}` },
     body: form,
   });
 };
 
-export const getMyApplicantProfile = () => authedFetch("/api/applicants/me");
+export const scanApplicantCV = () =>
+  authedFetch("/api/applicant/profile/cv/scan", { method: "POST" });
 
 export { authedFetch };
