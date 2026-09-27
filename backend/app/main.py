@@ -21,7 +21,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH"],
+    allow_methods=["GET", "POST", "PATCH", "PUT"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -44,7 +44,7 @@ app.include_router(job_alerts.router, prefix="/api/job-alerts", tags=["job-alert
 app.include_router(companies.router, prefix="/api/companies", tags=["companies"])
 app.include_router(employer_jobs.router, prefix="/api/employer/jobs", tags=["employer-jobs"])
 app.include_router(contact.router, prefix="/api/contact", tags=["contact"])
-app.include_router(applicant_profile.router, prefix="/api/applicants", tags=["applicants"])
+app.include_router(applicant_profile.router, prefix="/api/applicant/profile", tags=["applicant-profile"])
 app.include_router(internal.router)  # no prefix — route already defines /internal/sync-jobs
 
 
