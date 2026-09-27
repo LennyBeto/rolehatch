@@ -42,15 +42,12 @@ export default function ApplicantDashboard() {
   const [fetching, setFetching] = useState(true);
   const [activeTab, setActiveTab] = useState<SavedJobEntry["status"]>("saved");
 
-  // --- Profile & CV state ---
   const [profileLoading, setProfileLoading] = useState(true);
   const [fullName, setFullName] = useState("");
   const [expertise, setExpertise] = useState<string[]>([]);
   const [avatarId, setAvatarId] = useState<string | null>(null);
   const [cvFilename, setCvFilename] = useState<string | null>(null);
 
-  // Prevents overlapping calls if this effect is invoked again in quick
-  // succession (e.g. React Strict Mode's dev double-invoke).
   const profileInFlightRef = useRef(false);
   const savedJobsInFlightRef = useRef(false);
 
@@ -82,8 +79,6 @@ export default function ApplicantDashboard() {
     loadProfile();
   }, [loadProfile]);
 
-  // --- Existing saved/applied/hidden logic — unchanged apart from the
-  // dependency and in-flight guard below ---
   const loadSavedJobs = useCallback(async () => {
     if (!userId || savedJobsInFlightRef.current) return;
     savedJobsInFlightRef.current = true;
@@ -161,7 +156,6 @@ export default function ApplicantDashboard() {
         </>
       )}
 
-      {/* --- Existing Saved / Applied / Hidden tracker — unchanged --- */}
       <HStack gap={2} mb={6}>
         {TABS.map((tab) => (
           <Button
