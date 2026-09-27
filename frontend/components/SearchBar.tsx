@@ -11,11 +11,11 @@ export default function SearchBar() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    // Preserve quick_filter/remote_type/salary_min etc. instead of merging
-    // quick_filter text into the free-text title (see HeroSection for why).
     const params = new URLSearchParams(searchParams.toString());
+    const quickFilter = searchParams.get("quick_filter");
     params.delete("page");
-    if (query) params.set("title", query);
+    const combinedQuery = [query, quickFilter].filter(Boolean).join(" ");
+    if (combinedQuery) params.set("title", combinedQuery);
     else params.delete("title");
     router.push(`/?${params.toString()}`);
   };
@@ -23,7 +23,14 @@ export default function SearchBar() {
   return (
     <Box bg="surface" borderBottom="1px solid #E5E3DD" py={5}>
       <form onSubmit={handleSearch}>
-        <Flex maxW="700px" mx="auto" px={4} gap={3}>
+        <Flex
+          direction={{ base: "column", sm: "row" }}
+          maxW="700px"
+          mx="auto"
+          px={4}
+          gap={3}
+          w="full"
+        >
           <Input
             placeholder="Job title or keyword"
             value={query}
@@ -32,9 +39,18 @@ export default function SearchBar() {
             borderColor="gray.300"
             borderRadius="md"
             size="lg"
+            w="full"
+            minW={0}
             _focus={{ borderColor: "brand.500", boxShadow: "0 0 0 1px #2F4F3F" }}
           />
-          <Button type="submit" colorPalette="brand" size="lg" px={8} flexShrink={0}>
+          <Button
+            type="submit"
+            colorPalette="brand"
+            size="lg"
+            px={8}
+            w={{ base: "full", sm: "auto" }}
+            flexShrink={0}
+          >
             Search Jobs
           </Button>
         </Flex>

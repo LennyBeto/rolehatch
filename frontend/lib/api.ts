@@ -1,18 +1,52 @@
 // frontend/lib/api.ts
 import { supabase } from "./supabaseClient";
 
-async function authedFetch(path: string, options: RequestInit = {}) {
+const TOKEN_REFRESH_MARGIN_SECONDS = 60;
+
+async function getFreshAccessToken(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Not signed in");
 
-  return fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
-    ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${session.access_token}`,
-      "Content-Type": "application/json",
-    },
-  });
+  const expiresAt = session.expires_at ?? 0;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const isStale = expiresAt - nowSeconds < TOKEN_REFRESH_MARGIN_SECONDS;
+
+  if (!isStale) return session.access_token;
+
+  const { data: refreshed, error } = await supabase.auth.refreshSession();
+  if (error || !refreshed.session) {
+    throw new Error("Not signed in");
+  }
+  return refreshed.session.access_token;
+}
+
+async function authedFetch(path: string, options: RequestInit = {}) {
+  const accessToken = await getFreshAccessToken();
+
+  const doFetch = (token: string) =>
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+  let res = await doFetch(accessToken);
+
+  // Defensive retry: if the server still rejects the token (clock skew,
+  // a refresh race, etc.), force one more refresh and try again before
+  // giving up — this is what eliminates the "Invalid or expired token"
+  // errors seen on dashboard load, profile load/save, and CV upload.
+  if (res.status === 401) {
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    if (refreshed.session) {
+      res = await doFetch(refreshed.session.access_token);
+    }
+  }
+
+  return res;
 }
 
 export const saveJob = (jobId: string) =>
@@ -41,17 +75,28 @@ export const updateApplicantProfile = (payload: {
 }) => authedFetch("/api/applicant/profile", { method: "PUT", body: JSON.stringify(payload) });
 
 export const uploadApplicantCV = async (file: File) => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error("Not signed in");
+  const accessToken = await getFreshAccessToken();
 
   const form = new FormData();
   form.append("file", file);
 
-  return fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/applicant/profile/cv`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${session.access_token}` },
-    body: form,
-  });
+  const doUpload = (token: string) =>
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/applicant/profile/cv`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+
+  let res = await doUpload(accessToken);
+
+  if (res.status === 401) {
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    if (refreshed.session) {
+      res = await doUpload(refreshed.session.access_token);
+    }
+  }
+
+  return res;
 };
 
 export const scanApplicantCV = () =>

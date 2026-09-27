@@ -17,7 +17,11 @@
 .dark {
   --background: #0f1210;
   --foreground: #ededed;
-  --border-soft: #4b5563;
+  /* Was a flat mid-gray (#4b5563) — read as a bright, hard-edged line against
+     near-black surfaces. A low-opacity white scales with whatever's behind it
+     (background vs surface), so it reads as a soft hairline instead of a
+     screaming outline, and section dividers blend rather than cut sharply. */
+  --border-soft: rgba(255, 255, 255, 0.09);
   color-scheme: dark;
 }
 
