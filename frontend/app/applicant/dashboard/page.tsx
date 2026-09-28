@@ -46,6 +46,7 @@ export default function ApplicantDashboard() {
   const [fullName, setFullName] = useState("");
   const [expertise, setExpertise] = useState<string[]>([]);
   const [avatarId, setAvatarId] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [cvFilename, setCvFilename] = useState<string | null>(null);
   const [hasMatchScore, setHasMatchScore] = useState(false);
 
@@ -67,6 +68,7 @@ export default function ApplicantDashboard() {
       setFullName(data.full_name ?? "");
       setExpertise(data.expertise ? [data.expertise] : []);
       setAvatarId(data.avatar_id ?? null);
+      setAvatarUrl(data.avatar_url ?? null);
       setCvFilename(data.cv_filename ?? null);
       setHasMatchScore(data.has_match_score ?? false);
     } catch {
@@ -141,13 +143,15 @@ export default function ApplicantDashboard() {
 
       {!profileLoading && (
         <>
-          <ApplicantProfileCard
+           <ApplicantProfileCard
             fullName={fullName}
             expertise={expertise}
             avatarId={avatarId}
+            avatarUrl={avatarUrl}
             onFullNameChange={setFullName}
             onExpertiseChange={setExpertise}
             onAvatarChange={setAvatarId}
+            onAvatarUrlChange={setAvatarUrl}
             onSaved={loadProfile}
           />
 
