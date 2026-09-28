@@ -16,6 +16,7 @@ class ApplicantProfile(Base):
     full_name: Mapped[str | None] = mapped_column(String(255))
     expertise: Mapped[str | None] = mapped_column(String(100))
     avatar_id: Mapped[str | None] = mapped_column(String(50))
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)  # visible to employers in profile search — DB column has no server_default, Python-side default only
     cv_filename: Mapped[str | None] = mapped_column(String(255))
     cv_content_type: Mapped[str | None] = mapped_column(String(150))
