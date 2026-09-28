@@ -37,10 +37,7 @@ class Settings(BaseSettings):
         description="Upstash Redis Token",
         validation_alias=AliasChoices("UPSTASH_REDIS_TOKEN", "UPSTASH_REDIS_REST_TOKEN"),
     )
-    stripe_secret_key: str = Field(..., description="Stripe Secret Key", alias="STRIPE_SECRET_KEY")
-    stripe_webhook_secret: str = Field(
-        ..., description="Stripe Webhook Secret", alias="STRIPE_WEBHOOK_SECRET"
-    )
+
     frontend_url: str = Field(..., description="Frontend URL", alias="FRONTEND_URL")
     allowed_origins: list[str] = Field(
         default_factory=list,
@@ -58,6 +55,14 @@ class Settings(BaseSettings):
         "in resume/job match scoring",
         alias="GOOGLE_API_KEY",
     )
+
+    # ── M-Pesa (Safaricom Daraja API) ────────────────────────
+    mpesa_consumer_key: str = Field(default="", description="Daraja Consumer Key", alias="MPESA_CONSUMER_KEY")
+    mpesa_consumer_secret: str = Field(default="", description="Daraja Consumer Secret", alias="MPESA_CONSUMER_SECRET")
+    mpesa_shortcode: str = Field(default="", description="Lipa Na M-Pesa Shortcode", alias="MPESA_SHORTCODE")
+    mpesa_passkey: str = Field(default="", description="Lipa Na M-Pesa Passkey", alias="MPESA_PASSKEY")
+    mpesa_env: str = Field(default="sandbox", description="sandbox or production", alias="MPESA_ENV")
+    mpesa_callback_url: str = Field(default="", description="Daraja STK callback URL", alias="MPESA_CALLBACK_URL")
 
     @field_validator("allowed_origins", mode="before")
     @classmethod

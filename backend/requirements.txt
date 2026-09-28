@@ -87,7 +87,6 @@ SQLAlchemy==2.0.52
 starlette==1.6.0
 storage3==2.31.0
 StrEnum==0.4.15
-stripe==15.6.1
 supabase==2.31.0
 supabase-auth==2.31.0
 supabase-functions==2.31.0
@@ -111,3 +110,5 @@ python-docx==1.1.2
 passlib==1.7.4
 pgvector==0.3.6
 pluggy==1.6.0
+pypdf==5.1.0
+python-docx==1.1.2

@@ -1,8 +1,9 @@
 // frontend/components/EmployerPricingPreview.tsx
 "use client";
-import { Box, Heading, Text, SimpleGrid, Stack, HStack, Button, Icon } from "@chakra-ui/react";
+import { Box, Heading, Text, SimpleGrid, Stack, HStack, Button, Icon, Badge } from "@chakra-ui/react";
 import { LuCheck } from "react-icons/lu";
 import Link from "next/link";
+import { FEATURE_PRICING, FEATURE_DAYS } from "@/lib/pricing";
 
 const BENEFITS = [
   "Direct placement in front of engaged job seekers — no reposting delays",
@@ -31,8 +32,20 @@ export default function EmployerPricingPreview() {
 
           <Box bg="background" borderRadius="lg" border="1px solid #E5E3DD" p={6}>
             <Text fontSize="sm" color="gray.600" mb={1}>Featured Listing</Text>
-            <Heading size="xl" color="brand.500" mb={1}>$49</Heading>
-            <Text fontSize="sm" color="gray.600" mb={4}>per posting, 14 days</Text>
+            <Heading size="xl" color="brand.500" mb={1}>{FEATURE_PRICING.mpesa.display}</Heading>
+            <Text fontSize="sm" color="gray.600" mb={3}>
+              per posting, {FEATURE_DAYS} days — via {FEATURE_PRICING.mpesa.label}
+            </Text>
+
+            {!FEATURE_PRICING.card.live && (
+              <HStack mb={4}>
+                <Badge variant="subtle" colorPalette="gray" fontSize="xs">
+                  {FEATURE_PRICING.card.label.replace(" (via Paystack)", "")}
+                  {" "}({FEATURE_PRICING.card.display}) — coming soon via Paystack
+                </Badge>
+              </HStack>
+            )}
+
             <Text fontSize="sm" color="text">
               Pins your role above standard listings in every matching search.
             </Text>

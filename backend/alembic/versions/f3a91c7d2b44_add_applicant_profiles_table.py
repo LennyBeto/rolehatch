@@ -18,7 +18,6 @@ down_revision: Union[str, Sequence[str], None] = 'b6c784624213'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
 def upgrade() -> None:
     """Upgrade schema."""
     op.create_table('applicant_profiles',
@@ -37,7 +36,7 @@ def upgrade() -> None:
     sa.UniqueConstraint('user_id')
     )
 
-
 def downgrade() -> None:
     """Downgrade schema."""
     op.drop_table('applicant_profiles')
+

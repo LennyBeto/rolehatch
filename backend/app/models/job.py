@@ -20,7 +20,6 @@ class Company(Base):
     industry: Mapped[str | None] = mapped_column(String(120))
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
     jobs: Mapped[list["Job"]] = relationship(back_populates="company", cascade="all, delete-orphan")
     __tablename__ = "companies"
 

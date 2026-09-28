@@ -10,6 +10,8 @@ import { authedFetch } from "@/lib/api";
 import { toaster } from "@/components/ui/toaster";
 import { LuCheck } from "react-icons/lu";
 import Link from "next/link";
+import PromotePaymentOptions from "@/components/PromotePaymentOptions";
+import { FEATURE_PRICING, FEATURE_DAYS } from "@/lib/pricing";
 
 type EmployerJob = {
   id: string;
@@ -19,9 +21,6 @@ type EmployerJob = {
   level: string | null;
   tech_stack: string[] | null;
 };
-
-const FEATURE_PRICE = "$49";
-const FEATURE_DAYS = 14;
 
 const PRICING_BENEFITS = [
   "Pinned to the top of every matching search for 14 days",
@@ -36,10 +35,8 @@ export default function EmployerDashboard() {
   const [jobs, setJobs] = useState<EmployerJob[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [promotingId, setPromotingId] = useState<string | null>(null);
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
 
-  // Guards against React effect re-invocation (dev StrictMode) firing this
-  // twice and producing duplicate "Couldn't load your jobs" toasts.
   const hasFetchedRef = useRef(false);
 
   useEffect(() => {
@@ -73,21 +70,8 @@ export default function EmployerDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  const promote = async (jobId: string) => {
-    setPromotingId(jobId);
-    try {
-      const res = await authedFetch(`/api/promote/checkout/${jobId}`, { method: "POST" });
-      if (!res.ok) {
-        toaster.create({ title: "Not authorized to promote this listing", type: "error" });
-        return;
-      }
-      const { checkout_url } = await res.json();
-      window.location.href = checkout_url;
-    } catch {
-      toaster.create({ title: "Couldn't start checkout", description: "Please try again.", type: "error" });
-    } finally {
-      setPromotingId(null);
-    }
+  const toggleExpanded = (jobId: string) => {
+    setExpandedJobId((current) => (current === jobId ? null : jobId));
   };
 
   if (loading || !user) return null;
@@ -100,7 +84,6 @@ export default function EmployerDashboard() {
       <Text color="gray.600" mb={8}>Listings matching your verified email domain.</Text>
 
       <SimpleGrid columns={{ base: 1, md: 2 }} gap={8} alignItems="start">
-        {/* ── Listings column ── */}
         <Box>
           <HStack justify="space-between" mb={3}>
             <Heading size="sm" color="text">Your Listings</Heading>
@@ -122,15 +105,25 @@ export default function EmployerDashboard() {
                       {job.featured_until ? new Date(job.featured_until).toLocaleDateString() : "—"}
                     </Badge>
                   ) : (
-                    <Button
-                      size="sm"
-                      mt={2}
-                      colorPalette="brand"
-                      loading={promotingId === job.id}
-                      onClick={() => promote(job.id)}
-                    >
-                      Feature this listing — {FEATURE_PRICE}
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        mt={2}
+                        colorPalette="brand"
+                        variant={expandedJobId === job.id ? "outline" : "solid"}
+                        onClick={() => toggleExpanded(job.id)}
+                      >
+                        {expandedJobId === job.id
+                          ? "Cancel"
+                          : `Feature this listing — ${FEATURE_PRICING.mpesa.display}`}
+                      </Button>
+
+                      {expandedJobId === job.id && (
+                        <Box mt={3}>
+                          <PromotePaymentOptions jobId={job.id} />
+                        </Box>
+                      )}
+                    </>
                   )}
                 </Box>
               ))}
@@ -156,10 +149,9 @@ export default function EmployerDashboard() {
           )}
         </Box>
 
-        {/* ── Embedded pricing widget ── */}
         <Box bg="surface" borderRadius="lg" border="1px solid #E5E3DD" p={6}>
           <Text fontSize="sm" color="gray.600" mb={1}>Featured Listing</Text>
-          <Heading size="xl" color="brand.500" mb={1}>{FEATURE_PRICE}</Heading>
+          <Heading size="xl" color="brand.500" mb={1}>{FEATURE_PRICING.mpesa.display}</Heading>
           <Text fontSize="sm" color="gray.600" mb={4}>per posting, {FEATURE_DAYS} days</Text>
 
           <Stack gap={2} mb={4}>

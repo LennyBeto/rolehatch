@@ -33,7 +33,7 @@ export default function PrivacyPolicyPage() {
           <Heading size="sm" mb={2}>3. Third-party services</Heading>
           <List.Root fontSize="sm" gap={1} ps={4}>
             <List.Item>Supabase — authentication and database hosting</List.Item>
-            <List.Item>Stripe — payment processing for featured job listings (we never see or store card details)</List.Item>
+            <List.Item>Safaricom M-Pesa (Daraja API) — payment processing for featured job listings (we never see or store your M-Pesa PIN)</List.Item>
             <List.Item>Upstash — temporary caching of search results</List.Item>
             <List.Item>Google's favicon service — displaying company logos next to listings</List.Item>
           </List.Root>

@@ -41,7 +41,17 @@ def update_saved_job(job_id: str, payload: SavedJobUpdate, user=Depends(get_curr
 
 @router.get("")
 def list_saved_jobs(user=Depends(get_current_user), db: Session = Depends(get_db)):
-    return db.query(SavedJob).filter_by(user_id=user["sub"]).all()
+    records = db.query(SavedJob).filter_by(user_id=user["sub"]).all()
+    return [
+        {
+            "id": str(r.id),
+            "user_id": str(r.user_id),
+            "job_id": str(r.job_id),
+            "status": r.status,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in records
+    ]
 
 # ── My Applications — jobs marked as "applied", with job/company details ──
 @router.get("/applications", response_model=list[AppliedJobOut])
