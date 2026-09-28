@@ -30,6 +30,7 @@ export type ApplicantProfile = {
   full_name: string | null;
   expertise: string | null;
   avatar_id: string | null;
+  avatar_url?: string | null;
   cv_filename: string | null;
   has_match_score: boolean;
 };
@@ -48,5 +49,14 @@ export const uploadApplicantCV = (file: File) => {
 
 export const scanApplicantCV = () =>
   authedFetch("/api/applicant/profile/cv/scan", { method: "POST" });
+
+export const uploadApplicantAvatar = (file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  return authedFetch("/api/applicant/profile/avatar", { method: "POST", body: form });
+};
+
+export const deleteApplicantAvatar = () =>
+  authedFetch("/api/applicant/profile/avatar", { method: "DELETE" });
 
 export { authedFetch };
