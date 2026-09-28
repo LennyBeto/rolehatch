@@ -25,9 +25,6 @@ async function getFreshAccessToken(): Promise<string> {
 
   const { data: refreshed, error } = await refreshSessionOnce();
   if (error || !refreshed.session) {
-    // Refresh genuinely failed — return the token we have rather than
-    // giving up. The request itself will surface a normal error if the
-    // token really is unusable, without us pre-emptively signing out.
     return session.access_token;
   }
   return refreshed.session.access_token;
@@ -37,9 +34,6 @@ async function withFreshTokenRetry(doRequest: (token: string) => Promise<Respons
   const token = await getFreshAccessToken();
   let res = await doRequest(token);
 
-  // One retry with a forced refresh if the server rejects the token —
-  // no sign-out, no redirect. If it still fails, we just return the
-  // response and let the caller show its normal "couldn't load" message.
   if (res.status === 401) {
     const { data: refreshed } = await refreshSessionOnce();
     if (refreshed.session) {
@@ -76,16 +70,21 @@ export type ApplicantProfile = {
   full_name: string | null;
   expertise: string | null;
   avatar_id: string | null;
+  is_public: boolean;
   cv_filename: string | null;
   last_ats_score: number | null;
+  has_match_score: boolean;
 };
 
 export const getApplicantProfile = () => authedFetch("/api/applicant/profile");
+
+export const getMyApplications = () => authedFetch("/api/saved-jobs/applications");
 
 export const updateApplicantProfile = (payload: {
   full_name?: string;
   expertise?: string;
   avatar_id?: string;
+  is_public?: boolean;
 }) => authedFetch("/api/applicant/profile", { method: "PUT", body: JSON.stringify(payload) });
 
 export const uploadApplicantCV = async (file: File) => {

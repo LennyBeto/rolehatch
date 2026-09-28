@@ -47,6 +47,7 @@ export default function ApplicantDashboard() {
   const [expertise, setExpertise] = useState<string[]>([]);
   const [avatarId, setAvatarId] = useState<string | null>(null);
   const [cvFilename, setCvFilename] = useState<string | null>(null);
+  const [hasMatchScore, setHasMatchScore] = useState(false);
 
   const profileInFlightRef = useRef(false);
   const savedJobsInFlightRef = useRef(false);
@@ -67,6 +68,7 @@ export default function ApplicantDashboard() {
       setExpertise(data.expertise ? [data.expertise] : []);
       setAvatarId(data.avatar_id ?? null);
       setCvFilename(data.cv_filename ?? null);
+      setHasMatchScore(data.has_match_score ?? false);
     } catch {
       toaster.create({ title: "Couldn't load your profile", type: "error" });
     } finally {
@@ -151,7 +153,9 @@ export default function ApplicantDashboard() {
 
           <CVUploadSection
             cvFilename={cvFilename}
+            hasMatchScore={hasMatchScore}
             onCvUploaded={setCvFilename}
+            onMatchScoreUpdated={setHasMatchScore}
           />
         </>
       )}

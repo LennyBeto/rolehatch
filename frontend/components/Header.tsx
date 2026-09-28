@@ -206,26 +206,75 @@ export default function Header() {
                   <Text px={4} pt={1} pb={2} fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase" letterSpacing="wide">
                     Applicant
                   </Text>
-                  <Box as="a" href="/#listings" display="block" px={4} py={2} fontSize="sm" color="text" _hover={{ bg: "background" }}>
+                  <a
+                    href="/#listings"
+                    style={{
+                      display: "block",
+                      padding: "8px 16px",
+                      fontSize: "14px",
+                      color: "var(--chakra-colors-text)",
+                      textDecoration: "none",
+                    }}
+                  >
                     Find Jobs
-                  </Box>
-                  <Box as="a" href="/applicant/dashboard" display="block" px={4} py={2} fontSize="sm" color="text" _hover={{ bg: "background" }}>
+                  </a>
+                  <a
+                    href="/applicant/dashboard"
+                    style={{
+                      display: "block",
+                      padding: "8px 16px",
+                      fontSize: "14px",
+                      color: "var(--chakra-colors-text)",
+                      textDecoration: "none",
+                    }}
+                  >
                     Dashboard
-                  </Box>
+                  </a>
 
                   <Box borderTop="1px solid #E5E3DD" my={2} />
 
                   <Text px={4} pt={1} pb={2} fontSize="xs" fontWeight="700" color="gray.500" textTransform="uppercase" letterSpacing="wide">
                     Employer
                   </Text>
-                  <Box as="a" href="/post-job" display="block" px={4} py={2} fontSize="sm" color="text" _hover={{ bg: "background" }}>
+                  <a
+                    href="/post-job"
+                    style={{
+                      display: "block",
+                      padding: "8px 16px",
+                      fontSize: "14px",
+                      color: "var(--chakra-colors-text)",
+                      textDecoration: "none",
+                    }}
+                  >
                     Post a Job
-                  </Box>
-                  <Box as="a" href="/dashboard" display="block" px={4} py={2} fontSize="sm" color="text" _hover={{ bg: "background" }}>
+                  </a>
+                  <a
+                    href="/dashboard"
+                    style={{
+                      display: "block",
+                      padding: "8px 16px",
+                      fontSize: "14px",
+                      color: "var(--chakra-colors-text)",
+                      textDecoration: "none",
+                    }}
+                  >
                     Dashboard
-                  </Box>
+                  </a>
 
                   <Box borderTop="1px solid #E5E3DD" my={2} />
+
+                  <a
+                    href="/resume"
+                    style={{
+                      display: "block",
+                      padding: "8px 16px",
+                      fontSize: "14px",
+                      color: "var(--chakra-colors-text)",
+                      textDecoration: "none",
+                    }}
+                  >
+                    My Resume
+                  </a>
 
                   <Box
                     as="button"

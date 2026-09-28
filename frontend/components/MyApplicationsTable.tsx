@@ -21,7 +21,7 @@ export default function MyApplicationsTable() {
 
   useEffect(() => {
     getMyApplications()
-      .then((res) => {
+      .then((res: Response) => {
         if (!res.ok) throw new Error("Failed to load applications");
         return res.json();
       })

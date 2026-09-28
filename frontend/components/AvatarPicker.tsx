@@ -15,24 +15,25 @@ export default function AvatarPicker({
       {AVATAR_OPTIONS.map((avatar) => {
         const isSelected = avatar.id === selectedId;
         return (
-          <Box
+          <button
             key={avatar.id}
-            as="button"
             type="button"
             onClick={() => onSelect(avatar.id)}
-            borderRadius="full"
-            border="2px solid"
-            borderColor={isSelected ? "brand.500" : "transparent"}
-            p="2px"
-            cursor="pointer"
-            transition="border-color 0.15s ease"
+            style={{
+              borderRadius: "9999px",
+              border: isSelected ? "2px solid var(--chakra-colors-brand-500)" : "2px solid transparent",
+              padding: "2px",
+              cursor: "pointer",
+              transition: "border-color 0.15s ease",
+              background: "transparent",
+            }}
             aria-label={avatar.label}
             title={avatar.label}
           >
             <Box borderRadius="full" overflow="hidden" boxSize="56px">
               {avatar.Svg}
             </Box>
-          </Box>
+          </button>
         );
       })}
     </SimpleGrid>

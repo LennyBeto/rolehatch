@@ -1,10 +1,11 @@
 // frontend/components/JobList.tsx — wrap the results in a gated overlay when signed out
 "use client";
-import { Box, Heading, Text, Stack, Center } from "@chakra-ui/react";
+import { Box, Heading, Text, Stack, Center, HStack, Button } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toaster } from "@/components/ui/toaster";
 import { useAuth } from "@/lib/AuthContext";
+import { supabase } from "@/lib/supabaseClient";
 import JobCard from "./JobCard";
 import PaginationControls from "./PaginationControls";
 import JobListSkeleton from "./JobListSkeleton";
@@ -22,6 +23,7 @@ export default function JobList() {
   const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [matchSort, setMatchSort] = useState(false);
 
   const currentPage = Number(searchParams.get("page") ?? 1);
 
@@ -42,16 +44,24 @@ export default function JobList() {
     if (language) params.set("language", language);
     if (quickFilter) params.set("quick_filter", quickFilter);
     params.set("page", String(currentPage));
+    if (matchSort && user) params.set("sort_by_match", "true");
 
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/jobs/search?${params.toString()}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load jobs");
-        return res.json();
-      })
+    const run = async () => {
+      const headers: Record<string, string> = {};
+      if (matchSort && user) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) headers.Authorization = `Bearer ${session.access_token}`;
+      }
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/jobs/search?${params.toString()}`, { headers });
+      if (!res.ok) throw new Error("Failed to load jobs");
+      return res.json();
+    };
+
+    run()
       .then(setData)
       .catch(() => toaster.create({ title: "Couldn't load jobs", type: "error" }))
       .finally(() => setLoading(false));
-  }, [searchParams, currentPage]);
+  }, [searchParams, currentPage, matchSort, user]);
 
   const goToPage = (page: number) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -70,7 +80,20 @@ export default function JobList() {
 
   return (
     <Stack gap={6}>
-      {user && featured.length > 0 && (
+      {user && (
+        <HStack justify="flex-end">
+          <Button
+            size="sm"
+            variant={matchSort ? "solid" : "outline"}
+            colorPalette="brand"
+            onClick={() => setMatchSort((prev) => !prev)}
+          >
+            {matchSort ? "Sorted by Best Match" : "Sort by Best Match"}
+          </Button>
+        </HStack>
+      )}
+
+      {user && !matchSort && featured.length > 0 && (
         <Box>
           <Heading size="sm" color="gray.500" mb={3} textTransform="uppercase" letterSpacing="wide">
             Featured Roles
@@ -82,13 +105,13 @@ export default function JobList() {
       )}
 
       <Box>
-        {user && featured.length > 0 && (
+        {user && !matchSort && featured.length > 0 && (
           <Heading size="sm" color="gray.500" mb={3} textTransform="uppercase" letterSpacing="wide">
             All Jobs
           </Heading>
         )}
         <Stack gap={4}>
-          {(user ? regular : visibleJobs).map((job) => <JobCard key={job.id} job={job} />)}
+          {(user ? (matchSort ? data.jobs : regular) : visibleJobs).map((job) => <JobCard key={job.id} job={job} />)}
         </Stack>
       </Box>
 
@@ -123,7 +146,7 @@ export default function JobList() {
         </Box>
       )}
 
-      {user && (
+      {user && !matchSort && (
         <PaginationControls
           currentPage={data.page}
           totalPages={data.total_pages}

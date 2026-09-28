@@ -1,4 +1,4 @@
-# backend/app/api/routes/jobs.py
+# backend/app/api/routes/jobs.py — only the import and the resume_embedding lookup change
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
 from app.core.cache import cache_key, get_cached, set_cached
+from app.core.security import get_current_user_optional
 from app.db.session import get_db
 from app.models.job import Job, Company
+from app.models.applicant_profile import ApplicantProfile
 from app.schemas.job import JobOut
 
 router = APIRouter()
@@ -28,10 +30,8 @@ def build_search_query(
     remote_type: str | None = None,
     language: str | None = None,
     quick_filter: str | None = None,
+    resume_embedding: list[float] | None = None,
 ):
-    # Column-level select instead of full ORM hydration — only pulls the
-    # fields actually returned to the frontend, skipping heavier columns
-    # like Job.external_id, Job.scraped_at, Company.industry, Company.board_token.
     q = (
         select(
             Job.id, Job.title, Job.location, Job.remote_type, Job.commitment,
@@ -68,12 +68,6 @@ def build_search_query(
             q = q.where(or_(*title_filters))
 
     if quick_filter:
-        # QuickFilterChips buttons — strict OR-of-exact-phrases, no word
-        # exploding. This is deliberately separate from the `title` branch
-        # above: title's word-splitting is what let "AI/ML" match on the
-        # bare word "learning" and return 200+ unrelated jobs. Each
-        # "|"-separated phrase (e.g. "artificial intelligence|machine
-        # learning") is matched as a whole phrase only.
         phrases = [p.strip().lower() for p in quick_filter.split("|") if p.strip()]
         if phrases:
             q = q.where(or_(*[Job.title.ilike(f"%{p}%") for p in phrases]))
@@ -87,20 +81,23 @@ def build_search_query(
     if language:
         langs = [l.strip().lower() for l in language.split(",") if l.strip()]
         if langs:
-            # tech_stack values are stored lowercase (see pipeline.py TECH_KEYWORDS),
-            # so a Postgres ARRAY overlap check is a direct, index-friendly match.
             q = q.where(Job.tech_stack.overlap(langs))
 
-    is_featured_now = case(
-        (Job.featured_until.isnot(None) & (Job.featured_until > datetime.now(timezone.utc)), 0),
-        else_=1,
-    )
-    return q.order_by(is_featured_now, Job.posted_at.desc())
+    if resume_embedding is not None:
+        match_distance = Job.embedding.cosine_distance(resume_embedding)
+        q = q.add_columns(match_distance.label("match_distance")).order_by(match_distance)
+    else:
+        is_featured_now = case(
+            (Job.featured_until.isnot(None) & (Job.featured_until > datetime.now(timezone.utc)), 0),
+            else_=1,
+        )
+        q = q.order_by(is_featured_now, Job.posted_at.desc())
+    return q
 
 
 def _serialize_row(row, now: datetime) -> dict:
     m = row._mapping
-    return {
+    result = {
         "id": str(m["id"]),
         "title": m["title"],
         "location": m["location"],
@@ -119,12 +116,11 @@ def _serialize_row(row, now: datetime) -> dict:
         "company_name": m["company_name"],
         "company_domain": m["company_domain"],
     }
+    if "match_distance" in m and m["match_distance"] is not None:
+        similarity = 1 - m["match_distance"]
+        result["match_score"] = max(0, min(100, round(similarity * 100)))
+    return result
 
-
-# ── All static/literal paths MUST come before /{job_id} ──
-# FastAPI matches routes in declaration order — /{job_id} is a catch-all
-# that will otherwise swallow /search, /facets, and /stats as if they
-# were job IDs, causing Postgres UUID cast errors (22P02).
 
 @router.get("/search")
 def search_jobs(
@@ -134,20 +130,29 @@ def search_jobs(
     remote_type: str | None = None,
     language: str | None = None,
     quick_filter: str | None = None,
+    sort_by_match: bool = False,
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
+    user: dict | None = Depends(get_current_user_optional),
 ):
+    resume_embedding = None
+    if sort_by_match and user:
+        profile = db.query(ApplicantProfile).filter_by(user_id=user["sub"]).first()
+        if profile and profile.embedding is not None:
+            resume_embedding = profile.embedding
+
     params = {
         "location": location, "title": title, "salary_min": salary_min,
         "remote_type": remote_type, "language": language,
         "quick_filter": quick_filter, "page": page,
     }
+    use_cache = resume_embedding is None
     key = cache_key("search", params)
-    if (cached := get_cached(key)) is not None:
+    if use_cache and (cached := get_cached(key)) is not None:
         return cached
 
     base_query = build_search_query(
-        db, location, title, salary_min, remote_type, language, quick_filter
+        db, location, title, salary_min, remote_type, language, quick_filter, resume_embedding
     )
 
     count_query = select(func.count()).select_from(base_query.order_by(None).subquery())
@@ -165,7 +170,8 @@ def search_jobs(
         "total_pages": (total + PAGE_SIZE - 1) // PAGE_SIZE,
     }
 
-    set_cached(key, results, ttl_seconds=SEARCH_CACHE_TTL)
+    if use_cache:
+        set_cached(key, results, ttl_seconds=SEARCH_CACHE_TTL)
     return results
 
 
@@ -201,7 +207,6 @@ def get_platform_stats(db: Session = Depends(get_db)):
     return stats
 
 
-# ── Dynamic path last ──
 @router.get("/{job_id}")
 def get_job(job_id: str, db: Session = Depends(get_db)):
     key = f"job:{job_id}"

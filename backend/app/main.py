@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
 from app.api.routes import (
     jobs, saved_jobs, promote, internal, job_alerts, companies,
-    employer_jobs, contact, applicant_profile,
+    employer_jobs, contact, applicant_profile, resume,
 )
 
 limiter = Limiter(key_func=get_remote_address)
@@ -45,6 +45,7 @@ app.include_router(companies.router, prefix="/api/companies", tags=["companies"]
 app.include_router(employer_jobs.router, prefix="/api/employer/jobs", tags=["employer-jobs"])
 app.include_router(contact.router, prefix="/api/contact", tags=["contact"])
 app.include_router(applicant_profile.router, prefix="/api/applicant/profile", tags=["applicant-profile"])
+app.include_router(resume.router, prefix="/api/resume", tags=["resume"])
 app.include_router(internal.router)  # no prefix — route already defines /internal/sync-jobs
 
 

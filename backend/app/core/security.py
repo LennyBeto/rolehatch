@@ -6,6 +6,7 @@ from jose import jwt, JWTError
 from app.core.config import settings
 
 bearer_scheme = HTTPBearer()
+bearer_scheme_optional = HTTPBearer(auto_error=False)
 
 
 def _decode_locally(token: str) -> dict | None:
@@ -59,3 +60,20 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer_
         return payload
 
     raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token")
+
+
+async def get_current_user_optional(
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer_scheme_optional),
+):
+    """Same verification chain as get_current_user, but never raises —
+    returns None for missing, malformed, or invalid tokens. Used on routes
+    that must work for signed-out users but personalize when a valid
+    token is present (e.g. resume-match search sorting)."""
+    if not creds:
+        return None
+
+    payload = _decode_locally(creds.credentials)
+    if payload is not None:
+        return payload
+
+    return await _verify_via_supabase(creds.credentials)

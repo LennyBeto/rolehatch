@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     db_max_overflow: int = Field(default=20, description="SQLAlchemy DB max overflow", alias="DB_MAX_OVERFLOW")
     db_pool_timeout: int = Field(default=30, description="SQLAlchemy DB pool timeout", alias="DB_POOL_TIMEOUT")
     web_concurrency: int = Field(default=2, description="Uvicorn worker count", alias="WEB_CONCURRENCY")
+    google_api_key: str = Field(
+        default="",
+        description="Google Generative AI API key — used for Gemini text embeddings "
+        "in resume/job match scoring",
+        alias="GOOGLE_API_KEY",
+    )
 
     @field_validator("allowed_origins", mode="before")
     @classmethod

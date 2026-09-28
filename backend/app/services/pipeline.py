@@ -5,6 +5,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from dateutil import parser as date_parser
 from app.models.job import Job, Company
 from app.core.cache import redis
+from app.core.embeddings import embed_text
 from app.services.scrapers.greenhouse import GreenhouseScraper
 from app.services.scrapers.lever import LeverScraper
 from app.services.scrapers.workday import WorkdayScraper
@@ -96,6 +97,11 @@ async def sync_company(db: Session, company: Company):
         level = _infer_level(j["title"])
         remote_type = _infer_remote_type(j.get("location"))
         tech_stack = _extract_tech_stack(description)
+        # Embed on description when available, falling back to title so
+        # sparse postings (Workday/BambooHR often omit content) still get
+        # a usable vector for match scoring. embed_text returns None on
+        # any failure — never blocks or fails the sync run.
+        embedding = await embed_text(description or j["title"])
 
         stmt = pg_insert(Job).values(
             company_id=company.id,
@@ -110,6 +116,7 @@ async def sync_company(db: Session, company: Company):
             level=level,
             remote_type=remote_type,
             tech_stack=tech_stack,
+            embedding=embedding,
         ).on_conflict_do_update(
             index_elements=["source", "external_id"],
             set_={
@@ -122,6 +129,7 @@ async def sync_company(db: Session, company: Company):
                 "level": level,
                 "remote_type": remote_type,
                 "tech_stack": tech_stack,
+                "embedding": embedding,
             },
         )
         db.execute(stmt)

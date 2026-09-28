@@ -13,6 +13,7 @@ type Job = {
   salary_min: number | null; salary_max: number | null;
   source: string; source_url: string; is_featured: boolean;
   posted_at: string | null; company_name: string | null; company_domain: string | null;
+  match_score?: number;
 };
 
 const LEVEL_LABELS: Record<string, string> = {
@@ -30,6 +31,7 @@ export default function JobCard({ job }: { job: Job }) {
 
   const techStack = job.tech_stack ?? [];
   const hasDetails = Boolean(job.description) || techStack.length > 0;
+  const hasMatchScore = typeof job.match_score === "number";
 
   return (
     <Box
@@ -47,7 +49,21 @@ export default function JobCard({ job }: { job: Job }) {
         </Badge>
       )}
 
-      <Flex gap={3} align="flex-start" pr={job.is_featured ? "90px" : 0}>
+      {hasMatchScore && (
+        <Badge
+          position="absolute"
+          top={4}
+          right={job.is_featured ? "110px" : 5}
+          colorPalette="green"
+          variant="solid"
+          borderRadius="full"
+          px={3}
+        >
+          {job.match_score}% Match
+        </Badge>
+      )}
+
+      <Flex gap={3} align="flex-start" pr={job.is_featured || hasMatchScore ? "90px" : 0}>
         {logoUrl && (
           <Image src={logoUrl} alt={job.company_name ?? "Company logo"} boxSize="40px" borderRadius="md" mt={1} />
         )}

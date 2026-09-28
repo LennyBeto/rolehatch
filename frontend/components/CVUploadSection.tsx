@@ -1,6 +1,6 @@
 // frontend/components/CVUploadSection.tsx
 "use client";
-import { Box, Heading, Text, Button, Stack, Progress, HStack, Badge } from "@chakra-ui/react";
+import { Box, Heading, Text, Button, Stack, Progress, HStack, Badge, Textarea } from "@chakra-ui/react";
 import { useRef, useState } from "react";
 import { uploadApplicantCV, scanApplicantCV } from "@/lib/api";
 import { toaster } from "@/components/ui/toaster";
@@ -21,22 +21,41 @@ const BREAKDOWN_LABELS: Record<string, string> = {
 
 export default function CVUploadSection({
   cvFilename,
+  hasMatchScore,
   onCvUploaded,
+  onMatchScoreUpdated,
 }: {
   cvFilename: string | null;
+  hasMatchScore: boolean;
   onCvUploaded: (filename: string) => void;
+  onMatchScoreUpdated: (hasScore: boolean) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
+  const [pasteMode, setPasteMode] = useState(false);
+  const [pastedText, setPastedText] = useState("");
 
   const handleFileSelect = () => fileInputRef.current?.click();
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    await doUpload(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
+  const handlePasteSubmit = async () => {
+    if (pastedText.trim().length < 50) {
+      toaster.create({ title: "Resume text is too short", description: "Paste at least 50 characters.", type: "error" });
+      return;
+    }
+    const file = new File([pastedText], "resume.txt", { type: "text/plain" });
+    await doUpload(file);
+  };
+
+  const doUpload = async (file: File) => {
     setUploading(true);
     setResult(null);
     try {
@@ -47,6 +66,10 @@ export default function CVUploadSection({
       }
       toaster.create({ title: "CV uploaded", type: "success" });
       onCvUploaded(file.name);
+      // A fresh upload invalidates any previous scan/embedding — the
+      // backend already clears these server-side (see upload_cv), this
+      // just keeps the UI's match-score badge from claiming a stale state.
+      onMatchScoreUpdated(false);
     } catch (err) {
       toaster.create({
         title: "Couldn't upload CV",
@@ -55,7 +78,6 @@ export default function CVUploadSection({
       });
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -69,6 +91,9 @@ export default function CVUploadSection({
       }
       const data: ScanResult = await res.json();
       setResult(data);
+      // A successful scan is also when the backend generates the resume
+      // embedding used for job match-score sorting — see scan_cv.
+      onMatchScoreUpdated(true);
     } catch (err) {
       toaster.create({
         title: "Couldn't scan CV",
@@ -88,7 +113,8 @@ export default function CVUploadSection({
       <Heading size="md" mb={1}>CV & ATS Screening</Heading>
       <Text color="gray.600" fontSize="sm" mb={4}>
         Upload your CV and run it through our ATS screening tool to see how well it matches
-        applicant tracking systems used by employers.
+        applicant tracking systems used by employers. Scanning also enables job match scoring —
+        listings will show how well they fit your resume.
       </Text>
 
       <input
@@ -99,16 +125,62 @@ export default function CVUploadSection({
         onChange={handleFileChange}
       />
 
-      <HStack gap={3} mb={4} flexWrap="wrap">
-        <Button colorPalette="brand" variant="outline" onClick={handleFileSelect} loading={uploading}>
-          {cvFilename ? "Replace CV" : "Upload CV"}
+      <HStack gap={2} mb={3}>
+        <Button
+          size="xs"
+          variant={!pasteMode ? "solid" : "outline"}
+          colorPalette="brand"
+          onClick={() => setPasteMode(false)}
+        >
+          Upload File
         </Button>
-        {cvFilename && (
+        <Button
+          size="xs"
+          variant={pasteMode ? "solid" : "outline"}
+          colorPalette="brand"
+          onClick={() => setPasteMode(true)}
+        >
+          Paste Text
+        </Button>
+      </HStack>
+
+      {pasteMode ? (
+        <Stack gap={2} mb={4}>
+          <Textarea
+            placeholder="Paste your resume text here (minimum 50 characters)..."
+            value={pastedText}
+            onChange={(e) => setPastedText(e.target.value)}
+            rows={8}
+          />
+          <Button
+            colorPalette="brand"
+            variant="outline"
+            onClick={handlePasteSubmit}
+            loading={uploading}
+            disabled={pastedText.trim().length < 50}
+            alignSelf="flex-start"
+          >
+            Save Pasted Resume
+          </Button>
+        </Stack>
+      ) : (
+        <HStack gap={3} mb={4} flexWrap="wrap">
+          <Button colorPalette="brand" variant="outline" onClick={handleFileSelect} loading={uploading}>
+            {cvFilename ? "Replace CV" : "Upload CV"}
+          </Button>
+        </HStack>
+      )}
+
+      {cvFilename && (
+        <HStack gap={3} mb={4} flexWrap="wrap">
           <Text fontSize="sm" color="gray.600">
             Current file: <Text as="span" fontWeight="600">{cvFilename}</Text>
           </Text>
-        )}
-      </HStack>
+          <Badge colorPalette={hasMatchScore ? "green" : "gray"} variant="subtle" px={2} py={0.5} borderRadius="full">
+            {hasMatchScore ? "Match scoring live" : "Scan to enable match scoring"}
+          </Badge>
+        </HStack>
+      )}
 
       {cvFilename && (
         <Button colorPalette="brand" onClick={handleScan} loading={scanning} mb={4}>

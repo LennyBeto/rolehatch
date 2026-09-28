@@ -1,10 +1,11 @@
-# backend/app/api/routes/applicant_profile.py
+# backend/app/api/routes/applicant_profile.py — only update_profile changes
 import base64
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
+from app.core.embeddings import embed_text
 from app.db.session import get_db
 from app.models.applicant_profile import ApplicantProfile
 from app.schemas.applicant_profile import (
@@ -53,6 +54,8 @@ def update_profile(
         profile.expertise = payload.expertise
     if payload.avatar_id is not None:
         profile.avatar_id = payload.avatar_id
+    if payload.is_public is not None:
+        profile.is_public = payload.is_public
     db.commit()
     db.refresh(profile)
     return profile
@@ -76,13 +79,14 @@ async def upload_cv(
     profile.cv_content_type = file.content_type
     profile.cv_base64 = base64.b64encode(raw_bytes).decode("ascii")
     profile.last_ats_score = None
+    profile.embedding = None  # stale until the next scan re-embeds the new file
     db.commit()
     db.refresh(profile)
     return profile
 
 
 @router.post("/cv/scan", response_model=CVScanResult)
-def scan_cv(user=Depends(get_current_user), db: Session = Depends(get_db)):
+async def scan_cv(user=Depends(get_current_user), db: Session = Depends(get_db)):
     profile = _get_or_create_profile(db, user["sub"])
     if not profile.cv_base64:
         raise HTTPException(400, "Upload a CV before running a scan")
@@ -99,9 +103,11 @@ def scan_cv(user=Depends(get_current_user), db: Session = Depends(get_db)):
                 "or a DOCX file instead of a scanned image."
             ],
         )
+        profile.embedding = None
     else:
         overall, breakdown, suggestions = score_cv(text, profile.expertise)
         result = CVScanResult(overall_score=overall, breakdown=breakdown, suggestions=suggestions)
+        profile.embedding = await embed_text(text)
 
     profile.last_ats_score = result.overall_score
     db.commit()

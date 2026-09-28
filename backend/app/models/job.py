@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import String, Numeric, DateTime, ForeignKey, Text, Index, func
 from sqlalchemy.dialects.postgresql import UUID, ARRAY, ENUM
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from pgvector.sqlalchemy import Vector
 from app.db.base import Base
 
 source_enum = ENUM("greenhouse", "lever", "workday", "bamboohr", "direct", name="job_source")
@@ -47,7 +48,8 @@ class Job(Base):
     scraped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_active: Mapped[bool] = mapped_column(default=True)  # soft-close stale/removed postings
     featured_until: Mapped["datetime | None"] = mapped_column(DateTime(timezone=True), nullable=True)
-    
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(768), nullable=True)  # Gemini text-embedding-004, for resume match scoring
+
     company: Mapped["Company"] = relationship(back_populates="jobs")
 
     __table_args__ = (
