@@ -8,7 +8,8 @@ import { authedFetch, saveJob, markApplied, hideJob, getApplicantProfile, Applic
 import { toaster } from "@/components/ui/toaster";
 import ApplicantProfileCard from "@/components/ApplicantProfileCard";
 import CVUploadSection from "@/components/CVUploadSection";
-import ApplicantSummaryCard from "@/components/ApplicantSummaryCard"; // NEW
+import ApplicantSummaryCard from "@/components/ApplicantSummaryCard";
+import ProfileManagementCard from "@/components/ProfileManagementCard"; // NEW
 
 type SavedJobEntry = {
   id: string;
@@ -163,13 +164,16 @@ export default function ApplicantDashboard() {
             onMatchScoreUpdated={setHasMatchScore}
           />
 
-          {/* NEW: headline + 30-50 word professional summary (typed or generated from CV) */}
+          {/* headline + 30-50 word professional summary (typed or generated from CV) */}
           <ApplicantSummaryCard
             fullName={fullName}
             expertise={expertise[0] ?? ""}
             avatarUrl={avatarUrl}
             cvFilename={cvFilename}
           />
+
+          {/* NEW: remove CV / reset profile details. loadProfile re-fetches and remounts the cards above with fresh data */}
+          <ProfileManagementCard cvFilename={cvFilename} onChanged={loadProfile} />
         </>
       )}
 

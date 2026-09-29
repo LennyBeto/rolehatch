@@ -8,7 +8,7 @@ import uuid
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from pydantic import BaseModel, Field  # NEW
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from starlette.datastructures import Headers
 
@@ -18,7 +18,7 @@ from app.db.session import get_db
 from app.models.applicant_profile import ApplicantProfile
 from app.schemas.applicant_profile import ApplicantProfileOut, ApplicantProfileUpdate, CVScanResult
 from app.services.cv_parsing import extract_text_from_upload
-from app.services.cv_summary import MAX_WORDS, MIN_WORDS, build_summary_from_cv, word_count  # NEW
+from app.services.cv_summary import MAX_WORDS, MIN_WORDS, build_summary_from_cv, word_count
 from app.services.ats_scoring import compute_ats_score
 
 logger = logging.getLogger("perchrole.applicant")
@@ -34,7 +34,7 @@ EMBEDDING_MODEL = "models/text-embedding-004"  # 768 dimensions, matches Vector(
 EMBEDDING_MAX_CHARS = 8000
 
 
-# ── NEW: request body for the summarized-detail endpoint ──
+# Request body for the summarized-detail endpoint
 class ProfileSummaryIn(BaseModel):
     full_name: str = Field(min_length=1, max_length=255)
     expertise: str = Field(min_length=1, max_length=100)
@@ -75,6 +75,21 @@ def _storage_headers(extra: dict | None = None) -> dict:
     return headers
 
 
+# REFACTOR: avatar-object deletion extracted so DELETE /avatar and POST /reset share it (behavior unchanged)
+async def _remove_avatar_object(user_id: str) -> None:
+    delete_url = f"{settings.supabase_url.rstrip('/')}/storage/v1/object/{AVATAR_BUCKET}"
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.request(
+            "DELETE",
+            delete_url,
+            json={"prefixes": [f"{user_id}/avatar"]},
+            headers=_storage_headers(),
+        )
+    if resp.status_code not in (200, 204, 404):
+        logger.error("Avatar delete failed: %s %s", resp.status_code, resp.text[:200])
+        raise HTTPException(502, "Couldn't remove the image — please try again")
+
+
 def _embed_cv_text(text: str) -> list[float] | None:
     """Best-effort Gemini embedding. Returns None (scan still succeeds, match scoring stays off)
     if no key is configured or the API call fails.
@@ -107,7 +122,7 @@ def _rebuild_upload(profile: ApplicantProfile) -> tuple[UploadFile, bytes]:
     return upload, raw_bytes
 
 
-# ── NEW: summarized detail shape shared by GET/POST /summary ──
+# Summarized detail shape shared by GET/POST /summary
 def _summary_detail(profile: ApplicantProfile, source: str | None = None) -> dict:
     full_name = profile.full_name or ""
     expertise = profile.expertise or ""
@@ -144,7 +159,26 @@ def update_profile(
     return profile
 
 
-# ── NEW: summarized detail ──
+# NEW: reset profile details to their defaults (a freshly created profile)
+@router.post("/reset")
+async def reset_profile(user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user_id = str(user["sub"])
+    profile = _get_or_create(db, user_id)
+
+    # Storage first: if it fails we abort before touching the DB, so nothing is half-reset.
+    if profile.avatar_url:
+        await _remove_avatar_object(user_id)
+
+    profile.full_name = None
+    profile.expertise = None
+    profile.summary = None
+    profile.avatar_id = None
+    profile.avatar_url = None
+    # Intentionally untouched: is_public (a privacy setting) and the CV (use DELETE /cv).
+    db.commit()
+    return {"ok": True}
+
+
 @router.get("/summary")
 def get_summary(user=Depends(get_current_user), db: Session = Depends(get_db)):
     return _summary_detail(_get_or_create(db, user["sub"]))
@@ -244,18 +278,7 @@ async def delete_avatar(user=Depends(get_current_user), db: Session = Depends(ge
     profile = _get_or_create(db, user_id)
 
     if profile.avatar_url:
-        delete_url = f"{settings.supabase_url.rstrip('/')}/storage/v1/object/{AVATAR_BUCKET}"
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.request(
-                "DELETE",
-                delete_url,
-                json={"prefixes": [f"{user_id}/avatar"]},
-                headers=_storage_headers(),
-            )
-        if resp.status_code not in (200, 204, 404):
-            logger.error("Avatar delete failed: %s %s", resp.status_code, resp.text[:200])
-            raise HTTPException(502, "Couldn't remove the image — please try again")
-
+        await _remove_avatar_object(user_id)  # REFACTOR: shared helper, same behavior as before
         profile.avatar_url = None
         db.commit()
 
@@ -293,8 +316,21 @@ async def upload_cv(
     profile.embedding = None  # invalidate any prior scan/embedding on re-upload
     db.commit()
 
-    # NEW: suggested_summary is additive — null when the CV has too little text; existing clients ignore it
+    # suggested_summary is additive — null when the CV has too little text; existing clients ignore it
     return {"ok": True, "filename": file.filename, "suggested_summary": build_summary_from_cv(cv_text)}
+
+
+# NEW: remove the stored CV and everything derived from it
+@router.delete("/cv")
+def delete_cv(user=Depends(get_current_user), db: Session = Depends(get_db)):
+    profile = _get_or_create(db, user["sub"])
+    profile.cv_filename = None
+    profile.cv_content_type = None
+    profile.cv_base64 = None
+    profile.last_ats_score = None
+    profile.embedding = None  # match scoring stays off until a new CV is uploaded
+    db.commit()
+    return {"ok": True}  # idempotent: succeeds even if no CV was stored
 
 
 @router.post("/cv/scan", response_model=CVScanResult)

@@ -35,7 +35,7 @@ export type ApplicantProfile = {
   has_match_score: boolean;
 };
 
-// NEW: summarized detail returned by GET/POST /api/applicant/profile/summary
+// Summarized detail returned by GET/POST /api/applicant/profile/summary
 export type ApplicantSummary = {
   full_name: string;
   expertise: string;
@@ -48,14 +48,14 @@ export type ApplicantSummary = {
   updated_at: string | null;
 };
 
-// NEW: POST /api/applicant/profile/cv response (suggested_summary is null when the CV has too little text)
+// POST /api/applicant/profile/cv response (suggested_summary is null when the CV has too little text)
 export type ApplicantCVUploadResult = {
   ok: boolean;
   filename: string;
   suggested_summary: string | null;
 };
 
-// NEW: word limits, kept in sync with the backend (app/services/cv_summary.py)
+// Word limits, kept in sync with the backend (app/services/cv_summary.py)
 export const SUMMARY_MIN_WORDS = 30;
 export const SUMMARY_MAX_WORDS = 50;
 
@@ -65,7 +65,11 @@ export const updateApplicantProfile = (
   payload: Partial<Pick<ApplicantProfile, "full_name" | "expertise" | "avatar_id">>
 ) => authedFetch("/api/applicant/profile", { method: "PUT", body: JSON.stringify(payload) });
 
-// NEW: summarized detail. Omit/blank `summary` to generate it from the stored CV.
+// NEW: reset name, expertise, summary and profile image to defaults (CV and visibility are kept)
+export const resetApplicantProfile = () =>
+  authedFetch("/api/applicant/profile/reset", { method: "POST" });
+
+// Omit/blank `summary` to generate it from the stored CV.
 export const getApplicantSummary = () => authedFetch("/api/applicant/profile/summary");
 
 export const saveApplicantSummary = (payload: {
@@ -79,6 +83,10 @@ export const uploadApplicantCV = (file: File) => {
   form.append("file", file);
   return authedFetch("/api/applicant/profile/cv", { method: "POST", body: form });
 };
+
+// NEW: remove the stored CV (also clears match score/embedding; the saved summary is kept)
+export const deleteApplicantCV = () =>
+  authedFetch("/api/applicant/profile/cv", { method: "DELETE" });
 
 export const scanApplicantCV = () =>
   authedFetch("/api/applicant/profile/cv/scan", { method: "POST" });
