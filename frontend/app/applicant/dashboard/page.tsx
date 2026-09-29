@@ -8,6 +8,7 @@ import { authedFetch, saveJob, markApplied, hideJob, getApplicantProfile, Applic
 import { toaster } from "@/components/ui/toaster";
 import ApplicantProfileCard from "@/components/ApplicantProfileCard";
 import CVUploadSection from "@/components/CVUploadSection";
+import ApplicantSummaryCard from "@/components/ApplicantSummaryCard"; // NEW
 
 type SavedJobEntry = {
   id: string;
@@ -143,7 +144,7 @@ export default function ApplicantDashboard() {
 
       {!profileLoading && (
         <>
-           <ApplicantProfileCard
+          <ApplicantProfileCard
             fullName={fullName}
             expertise={expertise}
             avatarId={avatarId}
@@ -160,6 +161,14 @@ export default function ApplicantDashboard() {
             hasMatchScore={hasMatchScore}
             onCvUploaded={setCvFilename}
             onMatchScoreUpdated={setHasMatchScore}
+          />
+
+          {/* NEW: headline + 30-50 word professional summary (typed or generated from CV) */}
+          <ApplicantSummaryCard
+            fullName={fullName}
+            expertise={expertise[0] ?? ""}
+            avatarUrl={avatarUrl}
+            cvFilename={cvFilename}
           />
         </>
       )}

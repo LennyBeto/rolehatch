@@ -8,6 +8,7 @@ import uuid
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from pydantic import BaseModel, Field  # NEW
 from sqlalchemy.orm import Session
 from starlette.datastructures import Headers
 
@@ -17,6 +18,7 @@ from app.db.session import get_db
 from app.models.applicant_profile import ApplicantProfile
 from app.schemas.applicant_profile import ApplicantProfileOut, ApplicantProfileUpdate, CVScanResult
 from app.services.cv_parsing import extract_text_from_upload
+from app.services.cv_summary import MAX_WORDS, MIN_WORDS, build_summary_from_cv, word_count  # NEW
 from app.services.ats_scoring import compute_ats_score
 
 logger = logging.getLogger("perchrole.applicant")
@@ -30,6 +32,13 @@ AVATAR_BUCKET = "avatars"
 
 EMBEDDING_MODEL = "models/text-embedding-004"  # 768 dimensions, matches Vector(768)
 EMBEDDING_MAX_CHARS = 8000
+
+
+# ── NEW: request body for the summarized-detail endpoint ──
+class ProfileSummaryIn(BaseModel):
+    full_name: str = Field(min_length=1, max_length=255)
+    expertise: str = Field(min_length=1, max_length=100)
+    summary: str | None = Field(default=None, max_length=2000)  # blank -> generated from stored CV
 
 
 def _get_or_create(db: Session, user_id: str) -> ApplicantProfile:
@@ -98,6 +107,24 @@ def _rebuild_upload(profile: ApplicantProfile) -> tuple[UploadFile, bytes]:
     return upload, raw_bytes
 
 
+# ── NEW: summarized detail shape shared by GET/POST /summary ──
+def _summary_detail(profile: ApplicantProfile, source: str | None = None) -> dict:
+    full_name = profile.full_name or ""
+    expertise = profile.expertise or ""
+    summary = profile.summary or ""  # profiles created before the summary column may have none
+    return {
+        "full_name": full_name,
+        "expertise": expertise,
+        "headline": " - ".join(x for x in (full_name, expertise) if x),  # "Full Name - Expertise"
+        "summary": summary,
+        "summary_word_count": word_count(summary),
+        "summary_source": source,  # "manual" | "cv" | "existing" (only set on save)
+        "avatar_url": profile.avatar_url,
+        "cv_filename": profile.cv_filename,
+        "updated_at": profile.updated_at.isoformat() if profile.updated_at else None,
+    }
+
+
 @router.get("", response_model=ApplicantProfileOut)
 def get_profile(user=Depends(get_current_user), db: Session = Depends(get_db)):
     return _get_or_create(db, user["sub"])
@@ -115,6 +142,59 @@ def update_profile(
     db.commit()
     db.refresh(profile)
     return profile
+
+
+# ── NEW: summarized detail ──
+@router.get("/summary")
+def get_summary(user=Depends(get_current_user), db: Session = Depends(get_db)):
+    return _summary_detail(_get_or_create(db, user["sub"]))
+
+
+@router.post("/summary")
+def save_summary(
+    payload: ProfileSummaryIn,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    full_name = " ".join(payload.full_name.split())
+    expertise = " ".join(payload.expertise.split())
+    if not full_name or not expertise:
+        raise HTTPException(400, "Full name and expertise are required")
+
+    profile = _get_or_create(db, user["sub"])
+
+    manual = (payload.summary or "").strip()
+    if manual:
+        n = word_count(manual)
+        if not (MIN_WORDS <= n <= MAX_WORDS):
+            raise HTTPException(422, f"Professional summary must be {MIN_WORDS}-{MAX_WORDS} words (yours is {n})")
+        summary, source = manual, "manual"
+    elif profile.cv_base64:
+        try:
+            upload, raw_bytes = _rebuild_upload(profile)
+            cv_text = extract_text_from_upload(upload, raw_bytes)
+        except Exception:
+            logger.exception("CV re-parse failed while building summary")
+            raise HTTPException(400, "Couldn't read your stored CV — please upload it again")
+        summary = build_summary_from_cv(cv_text)
+        if not summary:
+            raise HTTPException(
+                422,
+                f"We couldn't find enough text in your CV to write a {MIN_WORDS}-{MAX_WORDS} word summary. "
+                "Please type it manually.",
+            )
+        source = "cv"
+    elif profile.summary:
+        summary, source = profile.summary, "existing"
+    else:
+        raise HTTPException(422, "Add a professional summary or upload your CV")
+
+    profile.full_name = full_name
+    profile.expertise = expertise
+    profile.summary = summary
+    db.commit()
+    db.refresh(profile)
+    return _summary_detail(profile, source)
 
 
 @router.post("/avatar")
@@ -213,7 +293,8 @@ async def upload_cv(
     profile.embedding = None  # invalidate any prior scan/embedding on re-upload
     db.commit()
 
-    return {"ok": True, "filename": file.filename}
+    # NEW: suggested_summary is additive — null when the CV has too little text; existing clients ignore it
+    return {"ok": True, "filename": file.filename, "suggested_summary": build_summary_from_cv(cv_text)}
 
 
 @router.post("/cv/scan", response_model=CVScanResult)

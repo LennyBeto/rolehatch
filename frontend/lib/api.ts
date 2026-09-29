@@ -35,11 +35,44 @@ export type ApplicantProfile = {
   has_match_score: boolean;
 };
 
+// NEW: summarized detail returned by GET/POST /api/applicant/profile/summary
+export type ApplicantSummary = {
+  full_name: string;
+  expertise: string;
+  headline: string; // "Full Name - Expertise"
+  summary: string; // 30-50 words
+  summary_word_count: number;
+  summary_source: "manual" | "cv" | "existing" | null; // only set on save
+  avatar_url: string | null;
+  cv_filename: string | null;
+  updated_at: string | null;
+};
+
+// NEW: POST /api/applicant/profile/cv response (suggested_summary is null when the CV has too little text)
+export type ApplicantCVUploadResult = {
+  ok: boolean;
+  filename: string;
+  suggested_summary: string | null;
+};
+
+// NEW: word limits, kept in sync with the backend (app/services/cv_summary.py)
+export const SUMMARY_MIN_WORDS = 30;
+export const SUMMARY_MAX_WORDS = 50;
+
 export const getApplicantProfile = () => authedFetch("/api/applicant/profile");
 
 export const updateApplicantProfile = (
   payload: Partial<Pick<ApplicantProfile, "full_name" | "expertise" | "avatar_id">>
 ) => authedFetch("/api/applicant/profile", { method: "PUT", body: JSON.stringify(payload) });
+
+// NEW: summarized detail. Omit/blank `summary` to generate it from the stored CV.
+export const getApplicantSummary = () => authedFetch("/api/applicant/profile/summary");
+
+export const saveApplicantSummary = (payload: {
+  full_name: string;
+  expertise: string;
+  summary?: string | null;
+}) => authedFetch("/api/applicant/profile/summary", { method: "POST", body: JSON.stringify(payload) });
 
 export const uploadApplicantCV = (file: File) => {
   const form = new FormData();

@@ -15,6 +15,7 @@ class ApplicantProfile(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, unique=True)  # Supabase auth.users.id
     full_name: Mapped[str | None] = mapped_column(String(255))
     expertise: Mapped[str | None] = mapped_column(String(100))
+    summary: Mapped[str | None] = mapped_column(Text)  # 30-50 word professional summary — typed manually or parsed from CV; nullable for profiles created before this column existed
     avatar_id: Mapped[str | None] = mapped_column(String(50))
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)  # visible to employers in profile search — DB column has no server_default, Python-side default only
