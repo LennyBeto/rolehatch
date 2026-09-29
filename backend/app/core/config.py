@@ -55,6 +55,7 @@ class Settings(BaseSettings):
         "in resume/job match scoring",
         alias="GOOGLE_API_KEY",
     )
+    gemini_api_key: str = Field(default="", description="Gemini API key", alias="GEMINI_API_KEY")
 
     # ── M-Pesa (Safaricom Daraja API) ────────────────────────
     mpesa_consumer_key: str = Field(default="", description="Daraja Consumer Key", alias="MPESA_CONSUMER_KEY")
