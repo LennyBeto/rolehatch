@@ -10,6 +10,7 @@ from app.services.scrapers.greenhouse import GreenhouseScraper
 from app.services.scrapers.lever import LeverScraper
 from app.services.scrapers.workday import WorkdayScraper
 from app.services.scrapers.bamboohr import BambooHRScraper
+import html
 import logging
 import re
 
@@ -42,12 +43,24 @@ def _parse_posted_at(raw_value: str | None):
     except (ValueError, TypeError):
         return None
 
+
 def _strip_html(raw_html: str | None) -> str | None:
+    """Convert HTML to readable plain text, keeping paragraph and bullet breaks
+    so the job detail page (white-space: pre-wrap) renders them properly."""
     if not raw_html:
         return None
-    text = re.sub(r"<[^>]+>", " ", raw_html)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text or None
+    # Greenhouse sends entity-escaped HTML (&lt;p&gt;...), so unescape first
+    text = html.unescape(raw_html)
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</(p|div|h[1-6]|ul|ol)>", "\n\n", text)
+    text = re.sub(r"(?i)<li[^>]*>", "• ", text)
+    text = re.sub(r"(?i)</li>", "\n", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html.unescape(text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" ?\n ?", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip() or None
 
 
 def _infer_level(title: str) -> str:
@@ -75,6 +88,7 @@ def _extract_tech_stack(description: str | None) -> list[str]:
         return []
     desc_lower = description.lower()
     return [kw for kw in TECH_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", desc_lower)]
+
 
 async def sync_company(db: Session, company: Company):
     scrape_fn = SCRAPERS.get(company.source_platform)
