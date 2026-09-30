@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.job import Job, Company
+from app.services.employer_access import serialize_employer_job
 
 router = APIRouter()
 
@@ -38,3 +39,4 @@ def my_jobs(user=Depends(get_current_user), db: Session = Depends(get_db)):
         }
         for j in jobs
     ]
+    # return [serialize_employer_job(j, now) for j in jobs]

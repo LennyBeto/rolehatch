@@ -1,7 +1,7 @@
 // frontend/app/dashboard/page.tsx
 "use client";
 import {
-  Box, Heading, Text, Stack, Button, Badge, SimpleGrid, HStack, Icon, Center, Spinner,
+  Box, Heading, Text, Stack, Button, Badge, SimpleGrid, HStack, Icon, Center, Spinner, Flex,
 } from "@chakra-ui/react";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
@@ -11,16 +11,10 @@ import { toaster } from "@/components/ui/toaster";
 import { LuCheck } from "react-icons/lu";
 import Link from "next/link";
 import PromotePaymentOptions from "@/components/PromotePaymentOptions";
+import EditJobDialog from "@/components/EditJobDialog";
+import DeleteJobDialog from "@/components/DeleteJobDialog";
 import { FEATURE_PRICING, FEATURE_DAYS } from "@/lib/pricing";
-
-type EmployerJob = {
-  id: string;
-  title: string;
-  is_featured: boolean;
-  featured_until: string | null;
-  level: string | null;
-  tech_stack: string[] | null;
-};
+import type { EmployerJob } from "@/lib/types";
 
 const PRICING_BENEFITS = [
   "Pinned to the top of every matching search for 14 days",
@@ -36,6 +30,8 @@ export default function EmployerDashboard() {
   const [jobsLoading, setJobsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [editingJob, setEditingJob] = useState<EmployerJob | null>(null);
+  const [deletingJob, setDeletingJob] = useState<EmployerJob | null>(null);
 
   const hasFetchedRef = useRef(false);
 
@@ -74,6 +70,17 @@ export default function EmployerDashboard() {
     setExpandedJobId((current) => (current === jobId ? null : jobId));
   };
 
+  const handleSaved = (updated: EmployerJob) => {
+    setJobs((prev) => prev.map((j) => (j.id === updated.id ? updated : j)));
+    setEditingJob(null);
+  };
+
+  const handleDeleted = (jobId: string) => {
+    setJobs((prev) => prev.filter((j) => j.id !== jobId));
+    setExpandedJobId((current) => (current === jobId ? null : current));
+    setDeletingJob(null);
+  };
+
   if (loading || !user) return null;
 
   const featuredCount = jobs.filter((j) => j.is_featured).length;
@@ -98,7 +105,27 @@ export default function EmployerDashboard() {
             <Stack gap={3}>
               {jobs.map((job) => (
                 <Box key={job.id} p={4} bg="surface" border="1px solid #E5E3DD" borderRadius="md">
-                  <Text fontWeight="600">{job.title}</Text>
+                  <Flex justify="space-between" align="flex-start" gap={3} wrap="wrap">
+                    <Box>
+                      <Text fontWeight="600">{job.title}</Text>
+                      {!job.can_manage && (
+                        <Text fontSize="xs" color="gray.500" mt={1}>
+                          Synced from {job.source} — edit it on your careers page.
+                        </Text>
+                      )}
+                    </Box>
+                    {job.can_manage && (
+                      <HStack gap={2}>
+                        <Button size="xs" variant="outline" colorPalette="brand" onClick={() => setEditingJob(job)}>
+                          Edit
+                        </Button>
+                        <Button size="xs" variant="outline" colorPalette="red" onClick={() => setDeletingJob(job)}>
+                          Delete
+                        </Button>
+                      </HStack>
+                    )}
+                  </Flex>
+
                   {job.is_featured ? (
                     <Badge colorPalette="brand" mt={1}>
                       Featured until{" "}
@@ -176,6 +203,9 @@ export default function EmployerDashboard() {
           </Button>
         </Box>
       </SimpleGrid>
+
+      <EditJobDialog job={editingJob} onClose={() => setEditingJob(null)} onSaved={handleSaved} />
+      <DeleteJobDialog job={deletingJob} onClose={() => setDeletingJob(null)} onDeleted={handleDeleted} />
     </Box>
   );
 }

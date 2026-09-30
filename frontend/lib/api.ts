@@ -26,6 +26,24 @@ export const markApplied = (jobId: string) =>
 export const hideJob = (jobId: string) =>
   authedFetch(`/api/saved-jobs/${jobId}`, { method: "PATCH", body: JSON.stringify({ status: "hidden" }) });
 
+// ── Employer listing management ──────────────────────────
+export type EmployerJobUpdate = {
+  title?: string;
+  location?: string | null;
+  remote_type?: string | null;
+  commitment?: string | null;
+  salary_min?: number | null;
+  salary_max?: number | null;
+  description?: string | null;
+  apply_url?: string;
+};
+
+export const updateEmployerJob = (jobId: string, body: EmployerJobUpdate) =>
+  authedFetch(`/api/employer/jobs/${jobId}`, { method: "PATCH", body: JSON.stringify(body) });
+
+export const deleteEmployerJob = (jobId: string) =>
+  authedFetch(`/api/employer/jobs/${jobId}`, { method: "DELETE" });
+
 export type ApplicantProfile = {
   full_name: string | null;
   expertise: string | null;
