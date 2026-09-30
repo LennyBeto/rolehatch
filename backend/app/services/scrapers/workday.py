@@ -1,12 +1,20 @@
 # backend/app/services/scrapers/workday.py
-from .base import BaseScraper
+import logging
+
 import httpx
+
+from .base import BaseScraper
+
+logger = logging.getLogger("perchrole.workday")
+
 
 class WorkdayScraper(BaseScraper):
     """
     Workday careers sites follow the pattern:
     https://{tenant}.wd{n}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs
     Requires a POST, not GET — and pagination via 'offset'.
+    Descriptions live on a per-job detail endpoint:
+    https://{tenant}.wd{n}.myworkdayjobs.com/wday/cxs/{tenant}/{site}{externalPath}
     """
     async def scrape(self, tenant: str, wd_number: str, site: str, max_pages: int = 5):
         if not tenant or not wd_number or not site:
@@ -14,7 +22,8 @@ class WorkdayScraper(BaseScraper):
                 f"Workday scraper needs 'tenant:wd_number:site' — got tenant={tenant!r}, "
                 f"wd_number={wd_number!r}, site={site!r}. Check this company's board_token format."
             )
-        base_url = f"https://{tenant}.wd{wd_number}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs"
+        host = f"https://{tenant}.wd{wd_number}.myworkdayjobs.com"
+        base_url = f"{host}/wday/cxs/{tenant}/{site}/jobs"
         jobs = []
         offset = 0
         limit = 20
@@ -29,16 +38,34 @@ class WorkdayScraper(BaseScraper):
                 if not postings:
                     break
                 for p in postings:
-                    jobs.append({
+                    external_path = p.get("externalPath", "")
+                    job_url = f"{host}/{site}{external_path}"
+                    job = {
                         "title": p.get("title"),
                         "location": p.get("locationsText"),
-                        "url": f"https://{tenant}.wd{wd_number}.myworkdayjobs.com/{site}{p.get('externalPath', '')}",
+                        "url": job_url,
                         "source": "workday",
-                    })
+                        "posted_at": None,
+                        "content": None,
+                    }
+                    # Only fetch detail for new postings — the pipeline skips seen ones anyway
+                    if external_path and not self.already_synced("workday", job_url):
+                        info = await self._fetch_detail(client, f"{host}/wday/cxs/{tenant}/{site}{external_path}")
+                        job["content"] = info.get("jobDescription")
+                        job["posted_at"] = info.get("startDate")  # ISO date, e.g. "2026-09-10"
+                        await self.polite_delay(1.0)
+                    jobs.append(job)
                 offset += limit
-                await self._polite_delay()
+                await self.polite_delay(1.5)
         return jobs
 
-    async def _polite_delay(self):
-        import asyncio
-        await asyncio.sleep(1.5)
+    async def _fetch_detail(self, client: httpx.AsyncClient, detail_url: str) -> dict:
+        """One bad detail page must not fail the whole company sync."""
+        try:
+            resp = await client.get(detail_url)
+            if resp.status_code != 200:
+                return {}
+            return resp.json().get("jobPostingInfo", {}) or {}
+        except Exception:
+            logger.warning("Workday detail fetch failed: %s", detail_url, exc_info=True)
+            return {}
