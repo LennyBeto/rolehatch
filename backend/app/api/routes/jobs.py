@@ -91,7 +91,14 @@ def build_search_query(
             (Job.featured_until.isnot(None) & (Job.featured_until > datetime.now(timezone.utc)), 0),
             else_=1,
         )
-        q = q.order_by(is_featured_now, Job.posted_at.desc())
+        # Fall back to scraped_at: Lever/Workday/BambooHR jobs have no posted_at,
+        # and NULLs sort FIRST under DESC in Postgres, pinning old undated jobs on top.
+        # id is a final tiebreaker so pagination stays stable across pages.
+        q = q.order_by(
+            is_featured_now,
+            func.coalesce(Job.posted_at, Job.scraped_at).desc(),
+            Job.id,
+        )
     return q
 
 
