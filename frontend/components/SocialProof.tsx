@@ -6,6 +6,12 @@ import { useEffect, useState } from "react";
 type Company = { name: string; domain: string | null };
 type Stats = { total_jobs: number; total_companies: number };
 
+async function getJson<T>(baseUrl: string, path: string): Promise<T> {
+  const response = await fetch(`${baseUrl}${path}`);
+  if (!response.ok) throw new Error(`${path} request failed: ${response.status}`);
+  return response.json();
+}
+
 export default function SocialProof() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -15,37 +21,43 @@ export default function SocialProof() {
     const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL;
 
     if (!apiBaseUrl) {
+      console.warn("SocialProof: NEXT_PUBLIC_API_URL is not set");
       setLoading(false);
       return;
     }
 
-    Promise.all([
-      fetch(`${apiBaseUrl}/api/companies/featured`).then(async (response) => {
-        if (!response.ok) throw new Error(`Featured companies request failed: ${response.status}`);
-        return response.json();
-      }),
-      fetch(`${apiBaseUrl}/api/jobs/stats`).then(async (response) => {
-        if (!response.ok) throw new Error(`Jobs stats request failed: ${response.status}`);
-        return response.json();
-      }),
-    ])
-      .then(([companiesData, statsData]) => {
-        setCompanies(Array.isArray(companiesData) ? companiesData : []);
-        setStats(statsData ?? null);
-      })
-      .catch((err) => {
-        // Real fetch/parse errors are still visible to developers, while the
-        // component remains usable when the backend is temporarily unavailable.
-        console.error("SocialProof: failed to load companies/stats", err);
-      })
-      .finally(() => setLoading(false));
+    let cancelled = false;
+
+    Promise.allSettled([
+      getJson<Company[]>(apiBaseUrl, "/api/companies/featured"),
+      getJson<Stats>(apiBaseUrl, "/api/jobs/stats"),
+    ]).then(([companiesResult, statsResult]) => {
+      if (cancelled) return;
+
+      if (companiesResult.status === "fulfilled") {
+        setCompanies(Array.isArray(companiesResult.value) ? companiesResult.value : []);
+      } else {
+        // warn, not error: console.error triggers the Next.js dev overlay
+        console.warn("SocialProof: companies unavailable", companiesResult.reason);
+      }
+
+      if (statsResult.status === "fulfilled") {
+        setStats(statsResult.value ?? null);
+      } else {
+        console.warn("SocialProof: stats unavailable", statsResult.reason);
+      }
+
+      setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading) return <Center py={8}><Spinner size="sm" color="brand.500" /></Center>;
 
-  // Only hide the whole section if BOTH stats and companies came back
-  // empty — previously any empty companies list hid the stats line too,
-  // even when stats loaded fine.
+  // Hide the section only if BOTH stats and companies are unavailable.
   if (!stats && companies.length === 0) return null;
 
   return (
@@ -58,8 +70,8 @@ export default function SocialProof() {
       )}
       {companies.length > 0 && (
         <HStack justify="center" gap={8} flexWrap="wrap" px={4}>
-          {companies.map((c) => (
-            c.domain && (
+          {companies.map((c) =>
+            c.domain ? (
               <Image
                 key={c.name}
                 src={`https://www.google.com/s2/favicons?domain=${c.domain}&sz=64`}
@@ -68,8 +80,8 @@ export default function SocialProof() {
                 opacity={0.7}
                 title={c.name}
               />
-            )
-          ))}
+            ) : null
+          )}
         </HStack>
       )}
     </Box>
