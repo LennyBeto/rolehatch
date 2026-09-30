@@ -74,6 +74,8 @@ export default async function JobDetailPage(
     ? `https://www.google.com/s2/favicons?domain=${job.company_domain}&sz=128`
     : null;
 
+  const techStack = job.tech_stack ?? [];
+
   // Google for Jobs structured data:
   // https://developers.google.com/search/docs/appearance/structured-data/job-posting
   const jsonLd: Record<string, unknown> = {
@@ -151,20 +153,27 @@ export default async function JobDetailPage(
         )}
       </HStack>
 
-      {job.tech_stack && job.tech_stack.length > 0 && (
-        <Wrap gap={2} mb={6}>
-          {job.tech_stack.map((t) => (
-            <Badge key={t} variant="subtle" colorPalette="gray" textTransform="capitalize">{t}</Badge>
-          ))}
-        </Wrap>
-      )}
-
-      {job.description && (
-        <Box mb={8}>
-          <Heading as="h2" size="sm" mb={2}>About this role</Heading>
-          <Text whiteSpace="pre-wrap" color="text" fontSize="sm" lineHeight="1.7">{job.description}</Text>
+      {techStack.length > 0 && (
+        <Box mb={6}>
+          <Heading as="h2" size="sm" mb={2}>Tech Stack</Heading>
+          <Wrap gap={2}>
+            {techStack.map((t) => (
+              <Badge key={t} variant="subtle" colorPalette="gray" textTransform="capitalize">{t}</Badge>
+            ))}
+          </Wrap>
         </Box>
       )}
+
+      <Box mb={8}>
+        <Heading as="h2" size="sm" mb={2}>Job Description</Heading>
+        {job.description ? (
+          <Text whiteSpace="pre-wrap" color="text" fontSize="sm" lineHeight="1.7">{job.description}</Text>
+        ) : (
+          <Text color="gray.500" fontSize="sm">
+            The full description is available on the employer&apos;s site — use the Apply button below.
+          </Text>
+        )}
+      </Box>
 
       <HStack gap={3} mb={4}>
         <Button asChild colorPalette="brand" size="lg">
