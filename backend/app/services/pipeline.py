@@ -97,69 +97,89 @@ def _extract_tech_stack(description: str | None) -> list[str]:
     ]
 
 
-async def sync_company(db: Session, company: Company):
+async def sync_company(db: Session, company: Company) -> dict:
     scrape_fn = SCRAPERS.get(company.source_platform)
     if not scrape_fn:
         raise ValueError(f"No scraper registered for source_platform={company.source_platform!r}")
 
     raw_jobs = await scrape_fn(company)  # let real exceptions bubble up to internal.py's catch
 
-    seen_ids = []
-    for j in raw_jobs:
-        external_id = j["url"]
-        seen_ids.append(external_id)
+    # Guard: an empty result is almost always a scrape failure, not "0 open roles".
+    # Deactivating everything here would wipe the company's listings.
+    if not raw_jobs:
+        logger.warning("Empty scrape for %s — skipping deactivation", company.name)
+        return {"fetched": 0, "skipped": True}
 
-        redis_key = f"seen:{company.source_platform}:{external_id}"
-        if redis.get(redis_key):
-            continue
+    seen_ids: list[str] = []
+    pending_redis_keys: list[str] = []
 
-        posted_at = _parse_posted_at(j.get("posted_at"))
-        description = _strip_html(j.get("content"))
-        level = _infer_level(j["title"])
-        remote_type = _infer_remote_type(j.get("location"))
-        tech_stack = _extract_tech_stack(description)
-        # Embed on description when available, falling back to title so
-        # sparse postings (Workday/BambooHR often omit content) still get
-        # a usable vector for match scoring. embed_text returns None on
-        # any failure — never blocks or fails the sync run.
-        embedding = await embed_text(description or j["title"])
+    try:
+        for j in raw_jobs:
+            external_id = j["url"]
+            seen_ids.append(external_id)
 
-        stmt = pg_insert(Job).values(
-            company_id=company.id,
-            title=j["title"],
-            location=j.get("location"),
-            source=company.source_platform,
-            source_url=j["url"],
-            external_id=external_id,
-            is_active=True,
-            posted_at=posted_at,
-            description=description,
-            level=level,
-            remote_type=remote_type,
-            tech_stack=tech_stack,
-            embedding=embedding,
-        ).on_conflict_do_update(
-            index_elements=["source", "external_id"],
-            set_={
-                "title": j["title"],
-                "location": j.get("location"),
-                "is_active": True,
-                "scraped_at": func.now(),
-                "posted_at": posted_at,
-                "description": description,
-                "level": level,
-                "remote_type": remote_type,
-                "tech_stack": tech_stack,
-                "embedding": embedding,
-            },
-        )
-        db.execute(stmt)
-        redis.set(redis_key, "1", ex=86400)
+            redis_key = f"seen:{company.source_platform}:{external_id}"
+            if redis.get(redis_key):
+                continue
 
-    db.query(Job).filter(
-        Job.company_id == company.id,
-        Job.external_id.notin_(seen_ids),
-        Job.is_active.is_(True),
-    ).update({"is_active": False}, synchronize_session=False)
+            posted_at = _parse_posted_at(j.get("posted_at"))
+            description = _strip_html(j.get("content"))
+            level = _infer_level(j["title"])
+            remote_type = _infer_remote_type(j.get("location"))
+            tech_stack = _extract_tech_stack(description)
+            # Embed on description when available, falling back to title so
+            # sparse postings (Workday/BambooHR often omit content) still get
+            # a usable vector for match scoring. embed_text returns None on
+            # any failure — never blocks or fails the sync run.
+            embedding = await embed_text(description or j["title"])
 
-    db.commit()
+            stmt = pg_insert(Job).values(
+                company_id=company.id,
+                title=j["title"],
+                location=j.get("location"),
+                source=company.source_platform,
+                source_url=j["url"],
+                external_id=external_id,
+                is_active=True,
+                posted_at=posted_at,
+                description=description,
+                level=level,
+                remote_type=remote_type,
+                tech_stack=tech_stack,
+                embedding=embedding,
+            ).on_conflict_do_update(
+                index_elements=["source", "external_id"],
+                set_={
+                    "title": j["title"],
+                    "location": j.get("location"),
+                    "is_active": True,
+                    "scraped_at": func.now(),
+                    "posted_at": posted_at,
+                    "description": description,
+                    "level": level,
+                    "remote_type": remote_type,
+                    "tech_stack": tech_stack,
+                    "embedding": embedding,
+                },
+            )
+            db.execute(stmt)
+            pending_redis_keys.append(redis_key)
+
+        db.query(Job).filter(
+            Job.company_id == company.id,
+            Job.source == company.source_platform,
+            Job.external_id.notin_(seen_ids),
+            Job.is_active.is_(True),
+        ).update({"is_active": False}, synchronize_session=False)
+
+        db.commit()
+    except Exception:
+        db.rollback()  # never leave a failed transaction for the next company
+        raise
+
+    # Mark as seen ONLY after the commit succeeded, so a failed or timed-out
+    # sync never causes jobs to be skipped for the next 24 hours.
+    for key in pending_redis_keys:
+        redis.set(key, "1", ex=86400)
+
+    return {"fetched": len(raw_jobs), "upserted": len(pending_redis_keys)}
