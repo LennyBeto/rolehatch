@@ -16,7 +16,19 @@ steps:
   - name: "gcr.io/cloud-builders/docker"
     args: ["push", "us-central1-docker.pkg.dev/$PROJECT_ID/rolehatch/api:latest"]
 
-  # 3. Deploy to Cloud Run, secrets pulled fresh from Secret Manager each deploy
+  # 3. Run migrations BEFORE deploying, so new code never hits a schema that
+  #    lacks its columns/indexes (additive migrations are safe for the old revision).
+  #    Runs from ./backend because alembic/env.py imports the `app` package.
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: bash
+    dir: backend
+    args:
+      - "-c"
+      - |
+        pip install --quiet alembic sqlalchemy psycopg2-binary python-dotenv pgvector
+        DATABASE_URL=$$(gcloud secrets versions access latest --secret=database-url) alembic -c alembic.ini upgrade head
+
+  # 4. Deploy to Cloud Run, secrets pulled fresh from Secret Manager each deploy
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
     args:
@@ -28,17 +40,9 @@ steps:
       - "--allow-unauthenticated"
       - "--min-instances=0"
       - "--max-instances=10"
+      - "--timeout=900"
       - "--set-secrets=DATABASE_URL=database-url:latest,SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,UPSTASH_REDIS_TOKEN=upstash-token:latest,SCHEDULER_SECRET=scheduler-secret:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest"
-      - "--set-env-vars=ALLOWED_ORIGINS=https://rolehatch.com,UPSTASH_REDIS_URL=${_UPSTASH_URL},FRONTEND_URL=https://rolehatch.com"
-
-  # 4. Run migrations after deploy (idempotent — safe to run every time)
-  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
-    entrypoint: bash
-    args:
-      - "-c"
-      - |
-        pip install --quiet alembic sqlalchemy psycopg2-binary
-        DATABASE_URL=$$(gcloud secrets versions access latest --secret=database-url) alembic -c backend/alembic.ini upgrade head
+      - "--set-env-vars=ALLOWED_ORIGINS=https://rolehatch.com,UPSTASH_REDIS_URL=${_UPSTASH_URL},FRONTEND_URL=https://rolehatch.com,SUPABASE_URL=${_SUPABASE_URL}"
 
 images:
   - "us-central1-docker.pkg.dev/$PROJECT_ID/rolehatch/api:$SHORT_SHA"
@@ -46,6 +50,7 @@ images:
 
 substitutions:
   _UPSTASH_URL: "https://your-instance.upstash.io"
+  _SUPABASE_URL: "https://your-project-ref.supabase.co"
 
 options:
   logging: CLOUD_LOGGING_ONLY
