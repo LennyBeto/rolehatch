@@ -16,9 +16,11 @@ import re
 
 logger = logging.getLogger("perchrole.pipeline")
 
+# Bare "go" is intentionally excluded: it matches "go above and beyond",
+# "go-to-market", etc. Use "golang" (the sidebar's Go filter value).
 TECH_KEYWORDS = [
     "python", "django", "fastapi", "flask", "javascript", "typescript",
-    "react", "next.js", "vue", "node.js", "java", "go", "golang", "rust",
+    "react", "next.js", "vue", "node.js", "java", "golang", "rust",
     "c#", ".net", "postgresql", "postgres", "mysql", "mongodb", "redis",
     "aws", "gcp", "azure", "docker", "kubernetes", "terraform", "graphql",
     "rest api", "sql", "swift", "kotlin", "ruby", "rails", "php", "laravel",
@@ -87,7 +89,12 @@ def _extract_tech_stack(description: str | None) -> list[str]:
     if not description:
         return []
     desc_lower = description.lower()
-    return [kw for kw in TECH_KEYWORDS if re.search(rf"\b{re.escape(kw)}\b", desc_lower)]
+    # Lookarounds instead of \b so "c#" and ".net" match correctly, while
+    # "java" still won't match inside "javascript" and "sql" inside "postgresql".
+    return [
+        kw for kw in TECH_KEYWORDS
+        if re.search(rf"(?<!\w){re.escape(kw)}(?!\w)", desc_lower)
+    ]
 
 
 async def sync_company(db: Session, company: Company):

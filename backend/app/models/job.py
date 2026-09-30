@@ -21,7 +21,6 @@ class Company(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     jobs: Mapped[list["Job"]] = relationship(back_populates="company", cascade="all, delete-orphan")
-    __tablename__ = "companies"
 
 class Job(Base):
     __tablename__ = "jobs"
@@ -58,6 +57,7 @@ class Job(Base):
         Index("ix_jobs_salary", "salary_min", "salary_max"),
         Index("ix_jobs_title_trgm", "title", postgresql_using="gin",
               postgresql_ops={"title": "gin_trgm_ops"}),  # fuzzy title search
+        Index("ix_jobs_tech_stack", "tech_stack", postgresql_using="gin"),  # language filter (&&)
     )
 
 
@@ -68,7 +68,7 @@ class SavedJob(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)  # Supabase auth.users.id
     job_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
     status: Mapped[str] = mapped_column(String(20), default="saved")  # saved/applied/hidden
-    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # NEW: when status became "hidden"; drives 5-day auto-delete
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # when status became "hidden"; drives 5-day auto-delete
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (Index("ix_saved_jobs_user", "user_id", "job_id", unique=True),)

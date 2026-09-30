@@ -13,12 +13,13 @@ const REMOTE_TYPES = [
   { label: "Field", value: "field" },
 ];
 
+// values must match the lowercase keywords stored in jobs.tech_stack (pipeline.TECH_KEYWORDS)
 const LANGUAGES = [
   { label: "Python", value: "python" },
   { label: "JavaScript", value: "javascript" },
   { label: "TypeScript", value: "typescript" },
   { label: "Java", value: "java" },
-  { label: "Go", value: "go" },
+  { label: "Go", value: "golang" },
   { label: "Rust", value: "rust" },
   { label: "C#", value: "c#" },
   { label: "Ruby", value: "ruby" },
@@ -57,13 +58,9 @@ export default function FilterSidebar() {
     updateParams({ language: normalized.length ? normalized.join(",") : null });
   };
 
-  const handleSalaryChange = (value: number[]) => {
-    updateParams({ salary_min: String(value[0]), salary_max: String(value[1]) });
-  };
-
   const debouncedSalaryUpdate = useDebouncedCallback((value: number[]) => {
-  updateParams({ salary_min: String(value[0]), salary_max: String(value[1]) });
-}, 400);
+    updateParams({ salary_min: String(value[0]), salary_max: String(value[1]) });
+  }, 400);
 
   return (
     <Box bg="surface" p={4} borderRadius="md" border="1px solid #E5E3DD">
