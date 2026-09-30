@@ -68,6 +68,7 @@ class SavedJob(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)  # Supabase auth.users.id
     job_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"))
     status: Mapped[str] = mapped_column(String(20), default="saved")  # saved/applied/hidden
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # NEW: when status became "hidden"; drives 5-day auto-delete
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (Index("ix_saved_jobs_user", "user_id", "job_id", unique=True),)
