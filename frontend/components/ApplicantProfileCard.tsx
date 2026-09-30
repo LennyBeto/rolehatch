@@ -27,6 +27,13 @@ const EXPERTISE_COLLECTION = createListCollection({
   ],
 });
 
+// NEW: expertise is stored as the option value (e.g. "backend_engineer"); this turns it into its display label.
+// Falls back to the raw value for anything not in the list.
+export function expertiseLabel(value: string | null | undefined) {
+  if (!value) return "";
+  return EXPERTISE_COLLECTION.items.find((item) => item.value === value)?.label ?? value;
+}
+
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
 const ALLOWED_AVATAR_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
@@ -49,6 +56,9 @@ export default function ApplicantProfileCard({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // NEW: open collapsed when a complete profile is already saved, or as the default form when it isn't
+  // (first visit, or right after "Reset profile details" — reset remounts this card with empty values)
+  const [editing, setEditing] = useState(() => !(fullName.trim() && expertise[0]));
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedAvatar = getAvatarById(avatarId);
@@ -64,6 +74,8 @@ export default function ApplicantProfileCard({
       });
       if (!res.ok) throw new Error();
       toaster.create({ title: "Profile saved", type: "success" });
+      // NEW: collapse to avatar + name + expertise, but only when there is something meaningful to show
+      if (fullName.trim() && expertise[0]) setEditing(false);
       onSaved();
     } catch {
       toaster.create({ title: "Couldn't save profile", type: "error" });
@@ -127,6 +139,44 @@ export default function ApplicantProfileCard({
       }
     }
   };
+
+  // NEW: collapsed view — one avatar, the full name and the expertise
+  if (!editing) {
+    return (
+      <Box bg="surface" p={6} borderRadius="lg" border="1px solid #E5E3DD" mb={8}>
+        <Heading size="md" mb={4}>My Profile</Heading>
+
+        <HStack gap={5} align="center" flexWrap="wrap">
+          <Box
+            boxSize="96px"
+            flexShrink={0}
+            borderRadius="full"
+            overflow="hidden"
+            border="2px solid"
+            borderColor="brand.500"
+            bg="background"
+          >
+            {displayUrl ? (
+              <Image src={displayUrl} alt="Profile picture" boxSize="100%" objectFit="cover" />
+            ) : selectedAvatar ? (
+              selectedAvatar.Svg
+            ) : (
+              <Center h="100%" color="gray.400" fontSize="xs">No avatar</Center>
+            )}
+          </Box>
+
+          <Box flex="1" minW="200px">
+            <Text fontWeight="700" fontSize="lg">{fullName}</Text>
+            <Text color="gray.600">{expertiseLabel(expertise[0])}</Text>
+          </Box>
+
+          <Button size="sm" variant="outline" colorPalette="brand" onClick={() => setEditing(true)}>
+            Edit profile
+          </Button>
+        </HStack>
+      </Box>
+    );
+  }
 
   return (
     <Box bg="surface" p={6} borderRadius="lg" border="1px solid #E5E3DD" mb={8}>
