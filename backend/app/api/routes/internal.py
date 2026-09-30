@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.job import Company
+from app.services.hidden_jobs import purge_stale_hidden_jobs  # NEW
 from app.services.pipeline import sync_company
 from app.core.config import settings
 import logging
@@ -55,3 +56,12 @@ async def sync_all_companies(db: Session = Depends(get_db)):
         await _trigger_frontend_revalidation()
 
     return results
+
+
+# NEW: scheduled cleanup of hidden jobs that have stayed hidden for over 5 days, across all users.
+# Complements the per-user purge that runs when a dashboard loads (GET /api/saved-jobs).
+@router.post("/internal/purge-hidden-jobs", dependencies=[Depends(verify_scheduler_secret)])
+def purge_hidden_jobs(db: Session = Depends(get_db)):
+    deleted = purge_stale_hidden_jobs(db)
+    logger.info("Purged %s stale hidden saved-job rows", deleted)
+    return {"deleted": deleted}
