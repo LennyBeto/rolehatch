@@ -18,20 +18,30 @@ def _created_at_iso(j: dict) -> str | None:
     ms = j.get("createdAt")
     if not ms:
         return None
-    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat()
+    try:
+        return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat()
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None  # malformed timestamp must not fail the whole company sync
 
 
 class LeverScraper(BaseScraper):
     async def scrape(self, company: str):
         data = await self.fetch(f"https://api.lever.co/v0/postings/{company}?mode=json")
-        return [
-            {
+        if not isinstance(data, list):
+            # Lever returns an error object (not a list) for bad/unknown company slugs.
+            # Raise so sync_company reports a real failure instead of iterating dict keys.
+            raise ValueError(f"Unexpected Lever response for {company!r}: {str(data)[:200]}")
+
+        jobs = []
+        for j in data:
+            if not j.get("text") or not j.get("hostedUrl"):
+                continue  # skip malformed postings rather than KeyError-ing the whole board
+            jobs.append({
                 "title": j["text"],
-                "location": j.get("categories", {}).get("location"),
+                "location": (j.get("categories") or {}).get("location"),
                 "url": j["hostedUrl"],
                 "source": "lever",
                 "posted_at": _created_at_iso(j),
                 "content": _build_content(j),
-            }
-            for j in data
-        ]
+            })
+        return jobs
