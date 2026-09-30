@@ -195,7 +195,7 @@ ALLOWED_ORIGINS=http://localhost:3000
 ### `frontend/.env.local`
 
 ```dotenv
-NEXT_PUBLIC_API_URL=http://localhost:8080
+NEXT_PUBLIC_API_URL=http://localhost:8081
 NEXT_PUBLIC_SUPABASE_URL=https://[project-ref].supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-public-key
 ```
@@ -229,7 +229,7 @@ Row-Level Security policies (run in Supabase SQL editor) restrict `saved_jobs` t
 ```bash
 # Terminal 1 — backend
 cd backend
-uvicorn app.main:app --reload --port 8080
+uvicorn app.main:app --reload --port 8081
 
 # Terminal 2 — frontend
 cd frontend
