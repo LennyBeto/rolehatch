@@ -1,4 +1,4 @@
-# backend/app/api/routes/jobs.py — only the import and the resume_embedding lookup change
+# backend/app/api/routes/jobs.py
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -122,6 +122,7 @@ def _serialize_row(row, now: datetime) -> dict:
     return result
 
 
+# ── All static/literal paths MUST come before /{job_id} ──
 @router.get("/search")
 def search_jobs(
     location: str | None = None,
@@ -207,9 +208,11 @@ def get_platform_stats(db: Session = Depends(get_db)):
     return stats
 
 
+# ── Dynamic path last ──
 @router.get("/{job_id}")
 def get_job(job_id: str, db: Session = Depends(get_db)):
-    key = f"job:{job_id}"
+    # v2 key: older cached entries lack description/level/tech_stack
+    key = f"job:v2:{job_id}"
     if (cached := get_cached(key)) is not None:
         return cached
 
@@ -225,6 +228,9 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
         "location": job.location,
         "remote_type": job.remote_type,
         "commitment": job.commitment,
+        "level": job.level,
+        "tech_stack": job.tech_stack or [],
+        "description": job.description,
         "salary_min": float(job.salary_min) if job.salary_min is not None else None,
         "salary_max": float(job.salary_max) if job.salary_max is not None else None,
         "source": job.source,
