@@ -9,13 +9,14 @@ import { toaster } from "@/components/ui/toaster";
 import ApplicantProfileCard from "@/components/ApplicantProfileCard";
 import CVUploadSection from "@/components/CVUploadSection";
 import ApplicantSummaryCard from "@/components/ApplicantSummaryCard";
-import ProfileManagementCard from "@/components/ProfileManagementCard"; // NEW
+import ProfileManagementCard from "@/components/ProfileManagementCard";
 
 type SavedJobEntry = {
   id: string;
   user_id: string;
   job_id: string;
   status: "saved" | "applied" | "hidden";
+  hidden_at?: string | null; // NEW: set by the backend when a job is hidden
   created_at: string;
 };
 
@@ -35,6 +36,17 @@ const TABS: { key: SavedJobEntry["status"]; label: string }[] = [
   { key: "applied", label: "Applied" },
   { key: "hidden", label: "Hidden" },
 ];
+
+// NEW: keep in sync with HIDDEN_RETENTION_DAYS in backend/app/services/hidden_jobs.py
+const HIDDEN_RETENTION_DAYS = 5;
+
+// NEW: countdown shown on hidden jobs until they are auto-deleted
+function hiddenRemovalNote(hiddenAt: string | null | undefined) {
+  if (!hiddenAt) return null;
+  const elapsedDays = (Date.now() - new Date(hiddenAt).getTime()) / 86_400_000;
+  const daysLeft = Math.max(1, Math.ceil(HIDDEN_RETENTION_DAYS - elapsedDays));
+  return `Removed automatically in ${daysLeft} ${daysLeft === 1 ? "day" : "days"}`;
+}
 
 export default function ApplicantDashboard() {
   const { user, loading } = useAuth();
@@ -172,7 +184,7 @@ export default function ApplicantDashboard() {
             cvFilename={cvFilename}
           />
 
-          {/* NEW: remove CV / reset profile details. loadProfile re-fetches and remounts the cards above with fresh data */}
+          {/* remove CV / reset profile details. loadProfile re-fetches and remounts the cards above with fresh data */}
           <ProfileManagementCard cvFilename={cvFilename} onChanged={loadProfile} />
         </>
       )}
@@ -210,6 +222,10 @@ export default function ApplicantDashboard() {
                     <Badge colorPalette="brand" variant="subtle" mt={1} textTransform="capitalize">
                       {entry.job.remote_type}
                     </Badge>
+                  )}
+                  {/* NEW: countdown until the hidden job is auto-deleted */}
+                  {activeTab === "hidden" && hiddenRemovalNote(entry.hidden_at) && (
+                    <Text fontSize="xs" color="gray.500" mt={1}>{hiddenRemovalNote(entry.hidden_at)}</Text>
                   )}
                 </Box>
                 {entry.job?.source_url && (
