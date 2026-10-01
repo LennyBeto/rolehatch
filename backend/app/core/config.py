@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     db_max_overflow: int = Field(default=20, description="SQLAlchemy DB max overflow", alias="DB_MAX_OVERFLOW")
     db_pool_timeout: int = Field(default=30, description="SQLAlchemy DB pool timeout", alias="DB_POOL_TIMEOUT")
     web_concurrency: int = Field(default=2, description="Uvicorn worker count", alias="WEB_CONCURRENCY")
+    anthropic_api_key: str = Field(default="", description="Anthropic API key for Perchie", alias="ANTHROPIC_API_KEY")
+    chat_model: str = Field(default="claude-haiku-4-5-20251001", description="Model used by Perchie", alias="CHAT_MODEL")
     google_api_key: str = Field(
         default="",
         description="Google Generative AI API key — used for Gemini text embeddings "

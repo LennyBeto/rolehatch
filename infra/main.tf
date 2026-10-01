@@ -33,6 +33,11 @@ resource "google_secret_manager_secret" "secrets" {
     "scheduler-secret", "stripe-secret-key", "stripe-webhook-secret",
     "revalidate-secret", # used by the post-sync frontend revalidation in internal.py
   ])
+    for_each  = toset([
+    "database-url", "supabase-jwt-secret", "upstash-token",
+    "scheduler-secret", "stripe-secret-key", "stripe-webhook-secret",
+    "anthropic-api-key",
+  ])
   secret_id = each.key
   replication { auto {} }
 }
