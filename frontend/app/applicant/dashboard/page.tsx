@@ -10,6 +10,7 @@ import ApplicantProfileCard from "@/components/ApplicantProfileCard";
 import CVUploadSection from "@/components/CVUploadSection";
 import ApplicantSummaryCard from "@/components/ApplicantSummaryCard";
 import ProfileManagementCard from "@/components/ProfileManagementCard";
+import CVBuilderCard from "@/components/CVBuilderCard";
 
 type SavedJobEntry = {
   id: string;
@@ -175,6 +176,11 @@ export default function ApplicantDashboard() {
             onCvUploaded={setCvFilename}
             onMatchScoreUpdated={setHasMatchScore}
           />
+
+          {/* ATS-friendly CV templates (PDF / Google Doc → template) */}
+          <Box mb={6}>
+            <CVBuilderCard />
+          </Box>
 
           {/* headline + 30-50 word professional summary (typed or generated from CV) */}
           <ApplicantSummaryCard
