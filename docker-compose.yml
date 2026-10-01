@@ -2,7 +2,7 @@
 services:
   backend:
     build: ./backend
-    ports: ["8080:8080"]
+    ports: ["8081:8081"]
     env_file: ./backend/.env
   frontend:
     build: ./frontend
