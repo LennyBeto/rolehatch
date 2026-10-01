@@ -1,8 +1,10 @@
 // frontend/app/applicant/cv-templates/page.tsx
 "use client";
-import { Box, Heading, Text } from "@chakra-ui/react";
+import { Box, Button, Heading, Text } from "@chakra-ui/react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { LuArrowLeft } from "react-icons/lu";
 import { useAuth } from "@/lib/AuthContext";
 import CVTemplatePicker from "@/components/CVTemplatePicker";
 
@@ -23,6 +25,14 @@ export default function CVTemplatesPage() {
         Upload your CV, pick a template, and download a clean version that applicant tracking systems can read.
       </Text>
       <CVTemplatePicker />
+
+      <Box mt={10} pt={6} borderTop="1px solid #E5E3DD">
+        <Button asChild variant="outline" colorPalette="brand" size="md">
+          <Link href="/applicant/dashboard">
+            <LuArrowLeft /> Back to Dashboard
+          </Link>
+        </Button>
+      </Box>
     </Box>
   );
 }
