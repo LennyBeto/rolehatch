@@ -178,7 +178,7 @@ export default function ChatWidget() {
 
       <Flex gap={2} p={3} borderTop="1px solid #E5E3DD" align="flex-end" bg="surface">
         <Textarea
-          placeholder="Ask Perchie… (paste your CV text if you like)"
+          placeholder="Ask Perchie…"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
