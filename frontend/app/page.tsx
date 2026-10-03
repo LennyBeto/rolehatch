@@ -5,13 +5,14 @@ import HeroSection from "@/components/HeroSection";
 import SocialProof from "@/components/SocialProof";
 import QuickFilterChips from "@/components/QuickFilterChips";
 import FilterSidebar from "@/components/FilterSidebar";
+import MobileFilters from "@/components/MobileFilters";
 import JobList from "@/components/JobList";
 import JobAlertForm from "@/components/JobAlertForm";
 import EmployerPricingPreview from "@/components/EmployerPricingPreview";
 
 export default function HomePage() {
   return (
-    <Box bg="background" minH="100vh">
+    <Box bg="background" minH="100vh" overflowX="hidden">
       <Suspense fallback={<Box minH="200px" />}>
         <HeroSection />
         <SocialProof />
@@ -31,7 +32,11 @@ export default function HomePage() {
           >
             <FilterSidebar />
           </Box>
-          <Box flex="1">
+          <Box flex="1" minW={0}>
+            {/* Mobile-only: the sidebar is hidden below md, so filters live in a drawer */}
+            <Box display={{ base: "block", md: "none" }} mb={4}>
+              <MobileFilters />
+            </Box>
             <JobList />
           </Box>
         </Flex>
