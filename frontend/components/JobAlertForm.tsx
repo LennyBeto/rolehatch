@@ -38,35 +38,52 @@ export default function JobAlertForm() {
   };
 
   return (
-    <Box bg="surface" p={6} borderRadius="lg" border="1px solid #E5E3DD" maxW="700px" mx="auto" my={10}>
+    <Box
+      bg="surface"
+      p={{ base: 4, md: 6 }}
+      borderRadius="lg"
+      border="1px solid #E5E3DD"
+      maxW="700px"
+      mx={{ base: 4, md: "auto" }}
+      my={10}
+    >
       <Heading size="md" color="text" mb={1}>Never miss a matching role</Heading>
       <Text color="gray.600" fontSize="sm" mb={4}>
         Get new jobs emailed to you as soon as they're posted — free, unsubscribe anytime.
       </Text>
       <Box as="form" onSubmit={handleSubmit}>
-        <Flex direction={{ base: "column", md: "row" }} gap={3}>
+        <Flex direction={{ base: "column", md: "row" }} gap={3} w="full">
+          {/* flex ratios apply only in row mode (md+). In column mode they collapse the height. */}
           <Input
             placeholder="you@email.com"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            flex={2}
+            minH="48px"
+            flex={{ base: "none", md: 2 }}
+            minW={0}
+            w={{ base: "full", md: "auto" }}
           />
           <Input
             placeholder="Keyword (optional)"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            flex={2}
+            minH="48px"
+            flex={{ base: "none", md: 2 }}
+            minW={0}
+            w={{ base: "full", md: "auto" }}
           />
           <Select.Root
             collection={FREQUENCIES}
             value={frequency}
             onValueChange={(e) => setFrequency(e.value)}
-            flex={1}
+            flex={{ base: "none", md: 1 }}
+            minW={0}
+            w={{ base: "full", md: "auto" }}
           >
             <Select.Control>
-              <Select.Trigger>
+              <Select.Trigger minH="48px">
                 <Select.ValueText />
               </Select.Trigger>
             </Select.Control>
@@ -80,7 +97,14 @@ export default function JobAlertForm() {
               </Select.Positioner>
             </Portal>
           </Select.Root>
-          <Button type="submit" colorPalette="brand" loading={submitting} flexShrink={0}>
+          <Button
+            type="submit"
+            colorPalette="brand"
+            loading={submitting}
+            minH="48px"
+            flexShrink={0}
+            w={{ base: "full", md: "auto" }}
+          >
             Subscribe
           </Button>
         </Flex>
