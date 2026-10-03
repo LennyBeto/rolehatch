@@ -50,7 +50,7 @@ export default function HeroSection() {
   };
 
   return (
-    <Box bg="background" py={{ base: 12, md: 20 }} px={4} textAlign="center">
+    <Box bg="background" py={{ base: 10, md: 20 }} px={4} textAlign="center">
       <Heading
         as="h1"
         fontSize={{ base: "2xl", md: "4xl" }}
@@ -58,7 +58,6 @@ export default function HeroSection() {
         mb={4}
         fontWeight="700"
       >
-        
         Find Verified Global Tech Jobs, Sourced Directly From Employers
       </Heading>
       <Text color="gray.600" fontSize={{ base: "md", md: "lg" }} mt={1} mb={8} maxW="600px" mx="auto">
@@ -70,7 +69,7 @@ export default function HeroSection() {
         as="form"
         onSubmit={handleSearch}
         bg="surface"
-        p={4}
+        p={{ base: 3, md: 4 }}
         borderRadius="lg"
         boxShadow="0 4px 20px rgba(0,0,0,0.06)"
         maxW="900px"
@@ -78,35 +77,38 @@ export default function HeroSection() {
         border="1px solid #E5E3DD"
       >
         <Flex direction={{ base: "column", md: "row" }} gap={3} w="full">
+          {/* flex ratios apply only in row mode (md+). In column mode they collapse the height. */}
           <Input
             placeholder="Job title or keyword"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             size="lg"
-            flex={2}
+            minH="48px"
+            flex={{ base: "none", md: 2 }}
             minW={0}
-            w="full"
+            w={{ base: "full", md: "auto" }}
           />
           <Input
             placeholder="Location or Remote"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
             size="lg"
-            flex={1}
+            minH="48px"
+            flex={{ base: "none", md: 1 }}
             minW={0}
-            w="full"
+            w={{ base: "full", md: "auto" }}
           />
           <Select.Root
             collection={CATEGORIES}
             value={category}
             onValueChange={(e) => setCategory(e.value)}
             size="lg"
-            flex={1}
+            flex={{ base: "none", md: 1 }}
             minW={0}
-            w="full"
+            w={{ base: "full", md: "auto" }}
           >
             <Select.Control>
-              <Select.Trigger>
+              <Select.Trigger minH="48px">
                 <Select.ValueText placeholder="Category" />
               </Select.Trigger>
             </Select.Control>
@@ -127,6 +129,7 @@ export default function HeroSection() {
             colorPalette="brand"
             size="lg"
             px={8}
+            minH="48px"
             w={{ base: "full", md: "auto" }}
             flexShrink={0}
           >
@@ -135,12 +138,12 @@ export default function HeroSection() {
         </Flex>
       </Box>
 
-      <HStack justify="center" gap={4} mt={8} flexWrap="wrap">
+      <HStack justify="center" gap={3} mt={8} flexWrap="wrap">
         <Button
           asChild
           variant="outline"
           colorPalette="brand"
-          size="lg"
+          size={{ base: "md", md: "lg" }}
           borderRadius="full"
           px={8}
         >
@@ -149,7 +152,7 @@ export default function HeroSection() {
         <Button
           asChild
           colorPalette="brand"
-          size="lg"
+          size={{ base: "md", md: "lg" }}
           borderRadius="full"
           px={8}
         >
