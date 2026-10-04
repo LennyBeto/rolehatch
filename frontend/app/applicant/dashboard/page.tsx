@@ -11,6 +11,7 @@ import CVUploadSection from "@/components/CVUploadSection";
 import ApplicantSummaryCard from "@/components/ApplicantSummaryCard";
 import ProfileManagementCard from "@/components/ProfileManagementCard";
 import CVBuilderCard from "@/components/CVBuilderCard";
+import CoverLetterBuilderCard from "@/components/CoverLetterBuilderCard";
 
 type SavedJobEntry = {
   id: string;
@@ -180,6 +181,11 @@ export default function ApplicantDashboard() {
           {/* ATS-friendly CV templates (PDF / Google Doc → template) */}
           <Box mb={6}>
             <CVBuilderCard />
+          </Box>
+
+          {/* ATS-friendly cover letter templates */}
+          <Box mb={6}>
+            <CoverLetterBuilderCard />
           </Box>
 
           {/* headline + 30-50 word professional summary (typed or generated from CV) */}
