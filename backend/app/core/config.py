@@ -1,6 +1,9 @@
 # backend/app/core/config.py
+import json
+from typing import Annotated
+
 from pydantic import AliasChoices, Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -39,7 +42,9 @@ class Settings(BaseSettings):
     )
 
     frontend_url: str = Field(..., description="Frontend URL", alias="FRONTEND_URL")
-    allowed_origins: list[str] = Field(
+    # NoDecode stops pydantic-settings from json.loads()-ing the raw env string,
+    # so plain values like "http://localhost:3000" reach the validator below.
+    allowed_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=list,
         description="Allowed Origins",
         alias="ALLOWED_ORIGINS",
@@ -99,11 +104,21 @@ class Settings(BaseSettings):
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def split_allowed_origins(cls, v):
-        # .env stores this as a plain comma-separated string, e.g.
-        # ALLOWED_ORIGINS=https://rolehatch.com,https://www.rolehatch.com
-        # — without this, Pydantic tries to JSON-decode it and raises on import.
+        # Accepts "a,b", '["a","b"]', or empty. Trailing slashes are stripped because
+        # CORS origins must not end in "/" or the browser rejects the response.
+        if v is None:
+            return []
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
+            v = v.strip()
+            if not v:
+                return []
+            if v.startswith("["):
+                try:
+                    v = json.loads(v)
+                except ValueError:
+                    v = v.strip("[]").replace('"', "").replace("'", "").split(",")
+                return [str(o).strip().rstrip("/") for o in v if str(o).strip()]
+            return [o.strip().rstrip("/") for o in v.split(",") if o.strip()]
         return v
 
 

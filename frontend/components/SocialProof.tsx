@@ -16,6 +16,7 @@ export default function SocialProof() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failedLogos, setFailedLogos] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -55,33 +56,39 @@ export default function SocialProof() {
     };
   }, []);
 
+  const visibleCompanies = companies.filter((c) => c.domain && !failedLogos.has(c.name));
+
   if (loading) return <Center py={8}><Spinner size="sm" color="brand.500" /></Center>;
 
-  // Hide the section only if BOTH stats and companies are unavailable.
-  if (!stats && companies.length === 0) return null;
+  // Hide the section only if BOTH stats and logos are unavailable.
+  if (!stats && visibleCompanies.length === 0) return null;
 
   return (
     <Box py={8} borderTop="1px solid #E5E3DD" borderBottom="1px solid #E5E3DD" bg="surface">
       {stats && (
-        <Text textAlign="center" color="gray.600" fontSize="sm" mb={4}>
+        <Text
+          textAlign="center"
+          color="gray.600"
+          fontSize="sm"
+          mb={visibleCompanies.length > 0 ? 4 : 0}
+        >
           <Text as="span" fontWeight="700" color="brand.500">{stats.total_jobs}+</Text> live roles across{" "}
           <Text as="span" fontWeight="700" color="brand.500">{stats.total_companies}</Text> companies
         </Text>
       )}
-      {companies.length > 0 && (
+      {visibleCompanies.length > 0 && (
         <HStack justify="center" gap={8} flexWrap="wrap" px={4}>
-          {companies.map((c) =>
-            c.domain ? (
-              <Image
-                key={c.name}
-                src={`https://www.google.com/s2/favicons?domain=${c.domain}&sz=64`}
-                alt={c.name}
-                boxSize="32px"
-                opacity={0.7}
-                title={c.name}
-              />
-            ) : null
-          )}
+          {visibleCompanies.map((c) => (
+            <Image
+              key={c.name}
+              src={`https://www.google.com/s2/favicons?domain=${c.domain}&sz=64`}
+              alt={c.name}
+              boxSize="32px"
+              opacity={0.7}
+              title={c.name}
+              onError={() => setFailedLogos((prev) => new Set(prev).add(c.name))}
+            />
+          ))}
         </HStack>
       )}
     </Box>

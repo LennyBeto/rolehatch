@@ -41,7 +41,11 @@ steps:
       - "--min-instances=0"
       - "--max-instances=10"
       - "--timeout=900"
-      - "--set-secrets=DATABASE_URL=database-url:latest,SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,UPSTASH_REDIS_TOKEN=upstash-token:latest,SCHEDULER_SECRET=scheduler-secret:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest"
+      # Previous Perchie provider (Anthropic) — kept for future use. To switch back, uncomment this
+      # line and comment out the Gemini line below (the anthropic-api-key secret must exist in main.tf):
+      # - "--set-secrets=DATABASE_URL=database-url:latest,SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,UPSTASH_REDIS_TOKEN=upstash-token:latest,SCHEDULER_SECRET=scheduler-secret:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest"
+      # Active Perchie provider: Google AI Studio (Gemini)
+      - "--set-secrets=DATABASE_URL=database-url:latest,SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,UPSTASH_REDIS_TOKEN=upstash-token:latest,SCHEDULER_SECRET=scheduler-secret:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest,GEMINI_API_KEY=gemini-api-key:latest"
       - "--set-env-vars=ALLOWED_ORIGINS=https://rolehatch.com,UPSTASH_REDIS_URL=${_UPSTASH_URL},FRONTEND_URL=https://rolehatch.com,SUPABASE_URL=${_SUPABASE_URL}"
 
 images:

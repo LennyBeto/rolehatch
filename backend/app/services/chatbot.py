@@ -16,13 +16,23 @@ from app.models.job import Company, Job
 
 logger = logging.getLogger("perchrole.chatbot")
 
-if not settings.anthropic_api_key:
+# ── Active provider: Google AI Studio (Gemini) ───────────────────────────────
+if not settings.gemini_api_key:
     logger.warning(
-        "Perchie disabled: ANTHROPIC_API_KEY is empty (cwd=%s, .env in cwd=%s)",
+        "Perchie disabled: GEMINI_API_KEY is empty (cwd=%s, .env in cwd=%s)",
         Path.cwd(), Path(".env").exists(),
     )
 
-ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+# ── Previous provider: Anthropic (kept for future use) ───────────────────────
+# if not settings.anthropic_api_key:
+#     logger.warning(
+#         "Perchie disabled: ANTHROPIC_API_KEY is empty (cwd=%s, .env in cwd=%s)",
+#         Path.cwd(), Path(".env").exists(),
+#     )
+#
+# ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 
 SYSTEM_PROMPT = """You are Perchie, the friendly assistant on PerchRole (perchrole.com), a job search platform.
 
@@ -116,11 +126,22 @@ def build_live_context(db: Session, last_user_text: str) -> str:
     return "\n".join(lines)
 
 
+def _to_gemini_contents(messages: list[dict]) -> list[dict]:
+    # Gemini uses the role name "model" where Anthropic/OpenAI use "assistant"
+    return [
+        {
+            "role": "model" if m["role"] == "assistant" else "user",
+            "parts": [{"text": m["content"]}],
+        }
+        for m in messages
+    ]
+
+
 async def ask_perchie(db: Session, messages: list[dict]) -> str:
-    if not settings.anthropic_api_key:
+    if not settings.gemini_api_key:
         raise HTTPException(503, "Perchie is not configured yet")
 
-    # The API needs the conversation to start with a user turn
+    # The conversation must start with a user turn
     while messages and messages[0]["role"] == "assistant":
         messages.pop(0)
     if not messages:
@@ -128,39 +149,108 @@ async def ask_perchie(db: Session, messages: list[dict]) -> str:
 
     context = await run_in_threadpool(build_live_context, db, messages[-1]["content"])
 
+   #generation_config: dict = {"maxOutputTokens": 1024, "temperature": 0.7}
+   #if "2.5-flash" in settings.chat_model:
+    # Skip "thinking" so reasoning tokens don't eat the reply budget and replies stay fast
+    #generation_config["thinkingConfig"] = {"thinkingBudget": 0}
+
+    model = settings.chat_model
+    # Thought tokens count toward maxOutputTokens, so leave headroom
+    generation_config: dict = {"maxOutputTokens": 2048}
+    if model.startswith("gemini-3"):
+        # Gemini 3.x: thinking is set by level. "low" keeps chat fast; "minimal" is rejected on 3.8 Flash.
+        # Temperature stays at the model default, which Google recommends for Gemini 3.
+        generation_config["thinkingConfig"] = {"thinkingLevel": "low"}
+    else:
+        generation_config["temperature"] = 0.7
+        if "2.5-flash" in model:
+            generation_config["thinkingConfig"] = {"thinkingBudget": 0}
+
+    payload = {
+        "systemInstruction": {"parts": [{"text": f"{SYSTEM_PROMPT}\n\n{context}"}]},
+        "contents": _to_gemini_contents(messages),
+        "generationConfig": generation_config,
+    }
+
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                ANTHROPIC_URL,
+                GEMINI_URL.format(model=settings.chat_model),
                 headers={
-                    "x-api-key": settings.anthropic_api_key,
-                    "anthropic-version": "2023-06-01",
+                    "x-goog-api-key": settings.gemini_api_key,  # header, so the key never lands in URL logs
                     "content-type": "application/json",
                 },
-                json={
-                    "model": settings.chat_model,
-                    "max_tokens": 700,
-                    "system": f"{SYSTEM_PROMPT}\n\n{context}",
-                    "messages": messages,
-                },
+                json=payload,
             )
         resp.raise_for_status()
-        blocks = resp.json().get("content", [])
-        reply = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+        data = resp.json()
     except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
         logger.error(
             "Perchie upstream rejected request: status=%s body=%s",
-            exc.response.status_code,
+            status,
             exc.response.text[:500],
         )
-        if "credit balance is too low" in exc.response.text.lower():
-            raise HTTPException(
-                503,
-                "Perchie is unavailable because the Anthropic account has no credits",
-            ) from exc
+        if status == 429:
+            raise HTTPException(503, "Perchie is busy right now, please try again shortly") from exc
         raise HTTPException(502, "Perchie couldn't respond right now") from exc
     except (httpx.HTTPError, ValueError):
         logger.exception("Perchie upstream call failed")
         raise HTTPException(502, "Perchie couldn't respond right now")
 
+    if data.get("promptFeedback", {}).get("blockReason"):
+        return "I can't help with that one. Could you rephrase or ask me something else?"
+
+    candidates = data.get("candidates") or []
+    parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+    reply = "".join(p.get("text", "") for p in parts).strip()
+
     return reply or "Sorry, I didn't catch that. Could you rephrase?"
+
+
+# ── Previous provider: Anthropic (kept for future use) ───────────────────────
+# To switch back: uncomment the Anthropic settings in core/config.py, uncomment
+# ANTHROPIC_URL and the startup warning above, uncomment this function, and in
+# ask_perchie() replace the Gemini request/parsing with:
+#     return await _ask_anthropic(f"{SYSTEM_PROMPT}\n\n{context}", messages)
+#
+# async def _ask_anthropic(system_prompt: str, messages: list[dict]) -> str:
+#     if not settings.anthropic_api_key:
+#         raise HTTPException(503, "Perchie is not configured yet")
+#
+#     try:
+#         async with httpx.AsyncClient(timeout=30) as client:
+#             resp = await client.post(
+#                 ANTHROPIC_URL,
+#                 headers={
+#                     "x-api-key": settings.anthropic_api_key,
+#                     "anthropic-version": "2023-06-01",
+#                     "content-type": "application/json",
+#                 },
+#                 json={
+#                     "model": settings.chat_model,  # must be a Claude model name
+#                     "max_tokens": 700,
+#                     "system": system_prompt,
+#                     "messages": messages,
+#                 },
+#             )
+#         resp.raise_for_status()
+#         blocks = resp.json().get("content", [])
+#         reply = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+#     except httpx.HTTPStatusError as exc:
+#         logger.error(
+#             "Perchie upstream rejected request: status=%s body=%s",
+#             exc.response.status_code,
+#             exc.response.text[:500],
+#         )
+#         if "credit balance is too low" in exc.response.text.lower():
+#             raise HTTPException(
+#                 503,
+#                 "Perchie is unavailable because the Anthropic account has no credits",
+#             ) from exc
+#         raise HTTPException(502, "Perchie couldn't respond right now") from exc
+#     except (httpx.HTTPError, ValueError):
+#         logger.exception("Perchie upstream call failed")
+#         raise HTTPException(502, "Perchie couldn't respond right now")
+#
+#     return reply or "Sorry, I didn't catch that. Could you rephrase?"

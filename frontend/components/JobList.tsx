@@ -20,15 +20,20 @@ export default function JobList() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const signedIn = Boolean(user); // stable primitive: avoids refetching when the session object is re-emitted
   const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [matchSort, setMatchSort] = useState(false);
 
   const currentPage = Number(searchParams.get("page") ?? 1);
 
   useEffect(() => {
+    let cancelled = false; // ignore responses from superseded requests
     setLoading(true);
+    setError(false);
+
     const params = new URLSearchParams();
     const title = searchParams.get("title");
     const remoteType = searchParams.get("remote_type");
@@ -44,24 +49,37 @@ export default function JobList() {
     if (language) params.set("language", language);
     if (quickFilter) params.set("quick_filter", quickFilter);
     params.set("page", String(currentPage));
-    if (matchSort && user) params.set("sort_by_match", "true");
+    if (matchSort && signedIn) params.set("sort_by_match", "true");
 
     const run = async () => {
       const headers: Record<string, string> = {};
-      if (matchSort && user) {
+      if (matchSort && signedIn) {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) headers.Authorization = `Bearer ${session.access_token}`;
       }
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/jobs/search?${params.toString()}`, { headers });
       if (!res.ok) throw new Error("Failed to load jobs");
-      return res.json();
+      return (await res.json()) as SearchResponse;
     };
 
     run()
-      .then(setData)
-      .catch(() => toaster.create({ title: "Couldn't load jobs", type: "error" }))
-      .finally(() => setLoading(false));
-  }, [searchParams, currentPage, matchSort, user]);
+      .then((result) => {
+        if (!cancelled) setData(result);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setData(null);
+        setError(true);
+        toaster.create({ title: "Couldn't load jobs", type: "error" });
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, currentPage, matchSort, signedIn]);
 
   const goToPage = (page: number) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -70,6 +88,9 @@ export default function JobList() {
   };
 
   if (loading) return <JobListSkeleton />;
+  if (error) {
+    return <Center py={20}><Text color="gray.500">Couldn&apos;t load jobs. Please try again.</Text></Center>;
+  }
   if (!data || data.jobs.length === 0) {
     return <Center py={20}><Text color="gray.500">No jobs match your filters.</Text></Center>;
   }

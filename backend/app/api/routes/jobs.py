@@ -2,7 +2,8 @@
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import String, case, cast, func, or_, select
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
@@ -20,6 +21,36 @@ SEARCH_CACHE_TTL = 3300   # ~55 min — just under the hourly scrape cycle
 FACETS_CACHE_TTL = 1800
 STATS_CACHE_TTL = 1800
 JOB_DETAIL_CACHE_TTL = 3600
+
+# Bumped from "search" so stale cached results (e.g. empty language searches) are discarded.
+SEARCH_CACHE_PREFIX = "search_v2"
+
+# Maps what the UI may send -> the exact lowercase keywords pipeline.py stores in Job.tech_stack
+LANGUAGE_ALIASES = {
+    "go": ["go", "golang"],
+    "golang": ["go", "golang"],
+    "postgres": ["postgres", "postgresql"],
+    "postgresql": ["postgres", "postgresql"],
+    "node": ["node.js"],
+    "nodejs": ["node.js"],
+    "js": ["javascript"],
+    "ts": ["typescript"],
+    "dotnet": [".net"],
+}
+
+
+def _normalize_languages(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    out: list[str] = []
+    for part in raw.split(","):
+        key = part.strip().lower()
+        if not key:
+            continue
+        for value in LANGUAGE_ALIASES.get(key, [key]):
+            if value not in out:
+                out.append(value)
+    return out[:20]
 
 
 def build_search_query(
@@ -78,10 +109,12 @@ def build_search_query(
         types = [t.strip().lower() for t in remote_type.split(",") if t.strip()]
         if types:
             q = q.where(func.lower(Job.remote_type).in_(types))
-    if language:
-        langs = [l.strip().lower() for l in language.split(",") if l.strip()]
-        if langs:
-            q = q.where(Job.tech_stack.overlap(langs))
+
+    langs = _normalize_languages(language)
+    if langs:
+        # Explicit VARCHAR[] cast so `&&` compares varchar[] with varchar[]
+        # (a bare Python list can bind as text[] and fail operator resolution).
+        q = q.where(Job.tech_stack.overlap(cast(langs, ARRAY(String))))
 
     if resume_embedding is not None:
         match_distance = Job.embedding.cosine_distance(resume_embedding)
@@ -155,7 +188,7 @@ def search_jobs(
         "quick_filter": quick_filter, "page": page,
     }
     use_cache = resume_embedding is None
-    key = cache_key("search", params)
+    key = cache_key(SEARCH_CACHE_PREFIX, params)
     if use_cache and (cached := get_cached(key)) is not None:
         return cached
 

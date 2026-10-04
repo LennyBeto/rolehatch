@@ -13,6 +13,7 @@ from app.models.job import Company, Job, SavedJob  # noqa: ensures models are re
 from app.models.job_alert import JobAlert
 from app.models.contact_message import ContactMessage
 from app.models.applicant_profile import ApplicantProfile
+from app.models.wallet import Wallet, WalletTransaction
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

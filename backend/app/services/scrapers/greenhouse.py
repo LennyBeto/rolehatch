@@ -2,7 +2,9 @@
 from .base import BaseScraper
 
 class GreenhouseScraper(BaseScraper):
-    async def scrape(self, board_token: str):
+    async def scrape(self, board_token: str, skip_urls: set[str] | None = None):
+        # skip_urls is unused here (descriptions come back in the list call)
+        # but keeps the signature consistent with the other scrapers.
         # content=true is required, otherwise the list endpoint omits job descriptions
         data = await self.fetch(
             f"https://boards-api.greenhouse.io/v1/boards/{board_token}/jobs",

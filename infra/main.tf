@@ -32,11 +32,8 @@ resource "google_secret_manager_secret" "secrets" {
     "database-url", "supabase-jwt-secret", "upstash-token",
     "scheduler-secret", "stripe-secret-key", "stripe-webhook-secret",
     "revalidate-secret", # used by the post-sync frontend revalidation in internal.py
-  ])
-    for_each  = toset([
-    "database-url", "supabase-jwt-secret", "upstash-token",
-    "scheduler-secret", "stripe-secret-key", "stripe-webhook-secret",
-    "anthropic-api-key",
+    "gemini-api-key",    # Perchie chatbot (Google AI Studio)
+    # "anthropic-api-key", # Previous Perchie provider (Anthropic) — uncomment to switch back
   ])
   secret_id = each.key
   replication { auto {} }
