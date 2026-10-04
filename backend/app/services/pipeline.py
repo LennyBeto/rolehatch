@@ -6,6 +6,7 @@ from dateutil import parser as date_parser
 from app.models.job import Job, Company
 from app.core.cache import redis
 from app.core.embeddings import embed_text
+from app.services.scrapers.base import seen_key
 from app.services.scrapers.greenhouse import GreenhouseScraper
 from app.services.scrapers.lever import LeverScraper
 from app.services.scrapers.workday import WorkdayScraper
@@ -30,10 +31,12 @@ SENIOR_KEYWORDS = ["senior", "staff", "principal", "lead", "director", "vp", "he
 ENTRY_KEYWORDS = ["junior", "entry", "associate", "intern", "graduate"]
 
 SCRAPERS = {
-    "greenhouse": lambda c: GreenhouseScraper().scrape(c.board_token),
-    "lever": lambda c: LeverScraper().scrape(c.board_token),
-    "workday": lambda c: WorkdayScraper().scrape(*(c.board_token.split(":") + [None, None, None])[:3]),
-    "bamboohr": lambda c: BambooHRScraper().scrape(c.board_token),
+    "greenhouse": lambda c, skip: GreenhouseScraper().scrape(c.board_token, skip_urls=skip),
+    "lever": lambda c, skip: LeverScraper().scrape(c.board_token, skip_urls=skip),
+    "workday": lambda c, skip: WorkdayScraper().scrape(
+        *(c.board_token.split(":") + [None, None, None])[:3], skip_urls=skip
+    ),
+    "bamboohr": lambda c, skip: BambooHRScraper().scrape(c.board_token, skip_urls=skip),
 }
 
 
@@ -102,7 +105,17 @@ async def sync_company(db: Session, company: Company) -> dict:
     if not scrape_fn:
         raise ValueError(f"No scraper registered for source_platform={company.source_platform!r}")
 
-    raw_jobs = await scrape_fn(company)  # let real exceptions bubble up to internal.py's catch
+    # Jobs that already have a description: detail-based scrapers (Workday,
+    # BambooHR) skip re-fetching these, and the upsert below preserves them.
+    known_rows = db.query(Job.external_id).filter(
+        Job.company_id == company.id,
+        Job.source == company.source_platform,
+        Job.is_active.is_(True),
+        Job.description.isnot(None),
+    ).all()
+    known_urls = {r[0] for r in known_rows}
+
+    raw_jobs = await scrape_fn(company, known_urls)  # let real exceptions bubble up to internal.py's catch
 
     # Guard: an empty result is almost always a scrape failure, not "0 open roles".
     # Deactivating everything here would wipe the company's listings.
@@ -112,13 +125,14 @@ async def sync_company(db: Session, company: Company) -> dict:
 
     seen_ids: list[str] = []
     pending_redis_keys: list[str] = []
+    upserted = 0
 
     try:
         for j in raw_jobs:
             external_id = j["url"]
             seen_ids.append(external_id)
 
-            redis_key = f"seen:{company.source_platform}:{external_id}"
+            redis_key = seen_key(company.source_platform, external_id)
             if redis.get(redis_key):
                 continue
 
@@ -147,23 +161,36 @@ async def sync_company(db: Session, company: Company) -> dict:
                 remote_type=remote_type,
                 tech_stack=tech_stack,
                 embedding=embedding,
-            ).on_conflict_do_update(
-                index_elements=["source", "external_id"],
-                set_={
-                    "title": j["title"],
-                    "location": j.get("location"),
-                    "is_active": True,
-                    "scraped_at": func.now(),
-                    "posted_at": posted_at,
-                    "description": description,
-                    "level": level,
-                    "remote_type": remote_type,
-                    "tech_stack": tech_stack,
-                    "embedding": embedding,
-                },
             )
-            db.execute(stmt)
-            pending_redis_keys.append(redis_key)
+
+            update_set = {
+                "title": j["title"],
+                "location": j.get("location"),
+                "is_active": True,
+                "scraped_at": func.now(),
+                "level": level,
+                "remote_type": remote_type,
+            }
+            # Never overwrite stored values with empty ones when a scraper
+            # skipped the detail call or the embedding request failed.
+            if posted_at:
+                update_set["posted_at"] = posted_at
+            if description:
+                update_set["description"] = description
+                update_set["tech_stack"] = tech_stack
+                if embedding is not None:
+                    update_set["embedding"] = embedding
+
+            db.execute(stmt.on_conflict_do_update(
+                index_elements=["source", "external_id"],
+                set_=update_set,
+            ))
+            upserted += 1
+
+            # Only mark as seen once the job has a description (or already had
+            # one), so description-less jobs are retried until detail data arrives.
+            if description or external_id in known_urls:
+                pending_redis_keys.append(redis_key)
 
         db.query(Job).filter(
             Job.company_id == company.id,
@@ -182,4 +209,4 @@ async def sync_company(db: Session, company: Company) -> dict:
     for key in pending_redis_keys:
         redis.set(key, "1", ex=86400)
 
-    return {"fetched": len(raw_jobs), "upserted": len(pending_redis_keys)}
+    return {"fetched": len(raw_jobs), "upserted": upserted}
