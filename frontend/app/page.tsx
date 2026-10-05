@@ -12,7 +12,9 @@ import EmployerPricingPreview from "@/components/EmployerPricingPreview";
 
 export default function HomePage() {
   return (
-    <Box bg="background" minH="100vh" overflowX="hidden">
+    // overflowX="clip" (not "hidden"): hidden turns this Box into a scroll container,
+    // which breaks position: sticky on descendants. clip blocks horizontal overflow without that side effect.
+    <Box bg="background" minH="100vh" overflowX="clip">
       <Suspense fallback={<Box minH="200px" />}>
         <HeroSection />
         <SocialProof />
