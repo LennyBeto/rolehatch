@@ -16,6 +16,9 @@ type Props = {
   expertise: string; // first selected expertise
   avatarUrl: string | null;
   cvFilename: string | null;
+  onSummarySaved?: (summary: string) => void; // NEW (summary sync): lets the dashboard update My Profile
+  hidden?: boolean;          // NEW (collapse): collapsed into My Profile
+  onEditStart?: () => void;  // NEW (collapse): user clicked "Edit summary"
 };
 
 const countWords = (text: string) => (text.trim() ? text.trim().split(/\s+/).length : 0);
@@ -25,7 +28,12 @@ async function errorMessage(res: Response, fallback: string) {
   return typeof err?.detail === "string" ? err.detail : err?.detail?.[0]?.msg || fallback;
 }
 
-export default function ApplicantSummaryCard({ fullName, expertise, avatarUrl, cvFilename }: Props) {
+export default function ApplicantSummaryCard({
+  fullName, expertise, avatarUrl, cvFilename,
+  onSummarySaved, // NEW (summary sync)
+  hidden = false, // NEW (collapse)
+  onEditStart,    // NEW (collapse)
+}: Props) {
   const [detail, setDetail] = useState<ApplicantSummary | null>(null);
   const [loaded, setLoaded] = useState(false); // NEW: avoids flashing the textbox before the summary has loaded
   const [editing, setEditing] = useState(false); // NEW: true after the user clicks "Edit summary"
@@ -66,6 +74,7 @@ export default function ApplicantSummaryCard({ fullName, expertise, avatarUrl, c
         setSummary(data.summary);
         setDirty(false);
         setEditing(false); // NEW: saved -> hide the textbox
+        onSummarySaved?.(data.summary); // NEW (summary sync): push the saved text up to My Profile
         toaster.create({
           title: "Summary saved",
           description: data.summary_source === "cv" ? "Generated from your CV." : undefined,
@@ -81,7 +90,7 @@ export default function ApplicantSummaryCard({ fullName, expertise, avatarUrl, c
         setBusy(null);
       }
     },
-    [fullName, expertise]
+    [fullName, expertise, onSummarySaved] // NEW (summary sync): onSummarySaved added to deps
   );
 
   // A newly uploaded CV regenerates the summary, unless the user is mid-edit.
@@ -114,6 +123,7 @@ export default function ApplicantSummaryCard({ fullName, expertise, avatarUrl, c
     setSummary(detail?.summary ?? "");
     setDirty(false);
     setEditing(true);
+    onEditStart?.(); // NEW (collapse): keep the card visible while the user edits
   };
 
   // NEW: discard edits and go back to the saved view
@@ -130,6 +140,8 @@ export default function ApplicantSummaryCard({ fullName, expertise, avatarUrl, c
   // NEW: the textbox shows only while editing, or when no summary is saved yet (first visit, or after a profile reset)
   const hasSaved = Boolean(detail?.summary);
   const showEditor = editing || !hasSaved;
+
+  if (hidden) return null; // NEW (collapse): all hooks have already run above
 
   return (
     <Box bg="surface" border="1px solid #E5E3DD" borderRadius="lg" p={5} mb={6}>

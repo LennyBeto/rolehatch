@@ -4,7 +4,7 @@ import {
   Box, Heading, Text, Input, Button, Stack, Select, Portal,
   createListCollection, HStack, Center, Image,
 } from "@chakra-ui/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react"; // NEW (collapse): useEffect added
 import AvatarPicker from "./AvatarPicker";
 import { getAvatarById } from "@/lib/avatars";
 import { updateApplicantProfile, uploadApplicantAvatar, deleteApplicantAvatar } from "@/lib/api";
@@ -42,16 +42,20 @@ type Props = {
   expertise: string[];
   avatarId: string | null;
   avatarUrl: string | null;
+  summary?: string; // NEW (summary): saved professional summary, shown under the profile row
   onFullNameChange: (v: string) => void;
   onExpertiseChange: (v: string[]) => void;
   onAvatarChange: (v: string) => void;
   onAvatarUrlChange: (v: string | null) => void;
   onSaved: () => void;
+  onEditingChange?: (editing: boolean) => void; // NEW (collapse): tells the dashboard when the edit form is open
 };
 
 export default function ApplicantProfileCard({
   fullName, expertise, avatarId, avatarUrl,
+  summary = "", // NEW (summary)
   onFullNameChange, onExpertiseChange, onAvatarChange, onAvatarUrlChange, onSaved,
+  onEditingChange, // NEW (collapse)
 }: Props) {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -60,6 +64,11 @@ export default function ApplicantProfileCard({
   // (first visit, or right after "Reset profile details" — reset remounts this card with empty values)
   const [editing, setEditing] = useState(() => !(fullName.trim() && expertise[0]));
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // NEW (collapse): report edit mode (also fires on mount) so the Profile Summary card can reappear while editing
+  useEffect(() => {
+    onEditingChange?.(editing);
+  }, [editing, onEditingChange]);
 
   const selectedAvatar = getAvatarById(avatarId);
   const displayUrl = previewUrl ?? avatarUrl;
@@ -174,6 +183,21 @@ export default function ApplicantProfileCard({
             Edit profile
           </Button>
         </HStack>
+
+        {/* NEW (summary): saved professional summary, shown under avatar / name / expertise */}
+        {summary.trim() && (
+          <Text
+            mt={5}
+            pt={4}
+            borderTop="1px solid #E5E3DD"
+            fontSize="sm"
+            color="gray.600"
+            whiteSpace="pre-wrap"
+            lineHeight="1.7"
+          >
+            {summary.trim()}
+          </Text>
+        )}
       </Box>
     );
   }
@@ -238,7 +262,7 @@ export default function ApplicantProfileCard({
         <Box>
           <Text fontSize="sm" fontWeight="600" mb={1}>Full Name (as per CV)</Text>
           <Input
-            placeholder="e.g. Lenny Suswa"
+            placeholder="e.g. John Doe"
             value={fullName}
             onChange={(e) => onFullNameChange(e.target.value)}
           />
