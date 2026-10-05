@@ -105,9 +105,22 @@ export const updateApplicantProfile = (
 export const resetApplicantProfile = () =>
   authedFetch("/api/applicant/profile/reset", { method: "POST" });
 
-// Omit/blank `summary` to generate it from the stored CV.
 export const getApplicantSummary = () => authedFetch("/api/applicant/profile/summary");
 
+// NEW: returns just the summary text for the My Profile card.
+// Resolves to null on any failure so a failed fetch never wipes a summary already on screen.
+export const getApplicantSummaryText = async (): Promise<string | null> => {
+  try {
+    const res = await getApplicantSummary();
+    if (!res.ok) return null;
+    const data: ApplicantSummary = await res.json();
+    return data.summary ?? "";
+  } catch {
+    return null;
+  }
+};
+
+// Omit/blank `summary` to generate it from the stored CV.
 export const saveApplicantSummary = (payload: {
   full_name: string;
   expertise: string;
