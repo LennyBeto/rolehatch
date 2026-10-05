@@ -4,7 +4,11 @@ import { Box, Heading, Text, Stack, Badge, Button, HStack, Center, Spinner } fro
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { useRouter } from "next/navigation";
-import { authedFetch, saveJob, markApplied, hideJob, getApplicantProfile, ApplicantProfile } from "@/lib/api";
+import {
+  authedFetch, saveJob, markApplied, hideJob, getApplicantProfile,
+  getApplicantSummaryText, // NEW (summary)
+  ApplicantProfile,
+} from "@/lib/api";
 import { toaster } from "@/components/ui/toaster";
 import ApplicantProfileCard from "@/components/ApplicantProfileCard";
 import CVUploadSection from "@/components/CVUploadSection";
@@ -65,6 +69,9 @@ export default function ApplicantDashboard() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [cvFilename, setCvFilename] = useState<string | null>(null);
   const [hasMatchScore, setHasMatchScore] = useState(false);
+  const [profileSummary, setProfileSummary] = useState(""); // NEW (summary)
+  const [summaryMerged, setSummaryMerged] = useState(false);   // NEW (collapse): a saved summary lives inside My Profile
+  const [profileEditing, setProfileEditing] = useState(false); // NEW (collapse): My Profile edit form is open
 
   const profileInFlightRef = useRef(false);
   const savedJobsInFlightRef = useRef(false);
@@ -87,6 +94,14 @@ export default function ApplicantDashboard() {
       setAvatarUrl(data.avatar_url ?? null);
       setCvFilename(data.cv_filename ?? null);
       setHasMatchScore(data.has_match_score ?? false);
+
+      // NEW (summary): the summary lives on its own endpoint. A failed fetch
+      // returns null and leaves any summary already on screen untouched.
+      const summaryText = await getApplicantSummaryText();
+      if (summaryText !== null) {
+        setProfileSummary(summaryText);
+        setSummaryMerged(summaryText.trim().length > 0); // NEW (collapse): collapse when a summary exists, expand after a reset
+      }
     } catch {
       toaster.create({ title: "Couldn't load your profile", type: "error" });
     } finally {
@@ -148,6 +163,15 @@ export default function ApplicantDashboard() {
     }
   };
 
+  // NEW (collapse): the Profile Summary card collapses into My Profile unless the profile is being edited
+  const summaryCollapsed = summaryMerged && !profileEditing;
+
+  // NEW (collapse): a saved or generated summary updates My Profile and collapses the summary card
+  const handleSummarySaved = (text: string) => {
+    setProfileSummary(text);
+    setSummaryMerged(text.trim().length > 0);
+  };
+
   const visibleEntries = entries.filter((e) => e.status === activeTab);
 
   if (loading || !user) return null;
@@ -164,11 +188,13 @@ export default function ApplicantDashboard() {
             expertise={expertise}
             avatarId={avatarId}
             avatarUrl={avatarUrl}
+            summary={profileSummary} // NEW (summary)
             onFullNameChange={setFullName}
             onExpertiseChange={setExpertise}
             onAvatarChange={setAvatarId}
             onAvatarUrlChange={setAvatarUrl}
             onSaved={loadProfile}
+            onEditingChange={setProfileEditing} // NEW (collapse)
           />
 
           <CVUploadSection
@@ -194,6 +220,9 @@ export default function ApplicantDashboard() {
             expertise={expertise[0] ?? ""}
             avatarUrl={avatarUrl}
             cvFilename={cvFilename}
+            onSummarySaved={handleSummarySaved}         // CHANGED (collapse)
+            hidden={summaryCollapsed}                   // NEW (collapse)
+            onEditStart={() => setSummaryMerged(false)} // NEW (collapse)
           />
 
           {/* remove CV / reset profile details. loadProfile re-fetches and remounts the cards above with fresh data */}
