@@ -1,20 +1,38 @@
 // frontend/lib/api.ts
 import { supabase } from "./supabaseClient";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
 async function authedFetch(path: string, options: RequestInit = {}) {
+  if (!API_URL) {
+    throw new Error(
+      "NEXT_PUBLIC_API_URL is not set — add it to frontend/.env.local and restart `npm run dev`"
+    );
+  }
+
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error("Not signed in");
 
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  const url = `${API_URL}${path}`;
 
-  return fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
-    ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${session.access_token}`,
-      ...(isFormData ? {} : { "Content-Type": "application/json" }),
-    },
-  });
+  try {
+    return await fetch(url, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${session.access_token}`,
+        // Let the browser set the multipart boundary for FormData
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
+      },
+    });
+  } catch (err) {
+    throw new Error(
+      `Network error calling ${url} — backend unreachable, wrong port, or blocked by CORS. (${
+        err instanceof Error ? err.message : String(err)
+      })`
+    );
+  }
 }
 
 export const saveJob = (jobId: string) =>
@@ -83,7 +101,7 @@ export const updateApplicantProfile = (
   payload: Partial<Pick<ApplicantProfile, "full_name" | "expertise" | "avatar_id">>
 ) => authedFetch("/api/applicant/profile", { method: "PUT", body: JSON.stringify(payload) });
 
-// NEW: reset name, expertise, summary and profile image to defaults (CV and visibility are kept)
+// Reset name, expertise, summary and profile image to defaults (CV and visibility are kept)
 export const resetApplicantProfile = () =>
   authedFetch("/api/applicant/profile/reset", { method: "POST" });
 
@@ -102,7 +120,7 @@ export const uploadApplicantCV = (file: File) => {
   return authedFetch("/api/applicant/profile/cv", { method: "POST", body: form });
 };
 
-// NEW: remove the stored CV (also clears match score/embedding; the saved summary is kept)
+// Remove the stored CV (also clears match score/embedding; the saved summary is kept)
 export const deleteApplicantCV = () =>
   authedFetch("/api/applicant/profile/cv", { method: "DELETE" });
 
