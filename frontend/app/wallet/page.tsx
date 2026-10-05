@@ -13,10 +13,21 @@ type Tx = {
 };
 type WalletData = { balance: number; currency: string; phone_masked: string | null; transactions: Tx[] };
 
+const MIN_AMOUNT = 10;
+const MAX_AMOUNT = 150000;
+
 const fmt = (amount: number, currency = "KES") =>
   new Intl.NumberFormat("en-KE", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
 
 const STATUS_COLORS: Record<string, string> = { completed: "green", pending: "orange", failed: "red" };
+
+const errMessage = (err: unknown) =>
+  err instanceof Error ? err.message : "Please try again.";
+
+const validAmount = (value: string) => {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= MIN_AMOUNT && n <= MAX_AMOUNT;
+};
 
 export default function WalletPage() {
   const { user, loading } = useAuth();
@@ -31,13 +42,20 @@ export default function WalletPage() {
     if (!loading && !user) router.replace("/");
   }, [loading, user, router]);
 
-  const load = useCallback(async () => {
+  // `silent` suppresses the error toast so background polling doesn't spam the user.
+  const load = useCallback(async (silent = false) => {
     try {
       const res = await authedFetch("/api/wallet");
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
       setWallet(await res.json());
-    } catch {
-      toaster.create({ title: "Couldn't load your wallet", type: "error" });
+    } catch (err) {
+      if (!silent) {
+        toaster.create({
+          title: "Couldn't load your wallet",
+          description: errMessage(err),
+          type: "error",
+        });
+      }
     }
   }, []);
 
@@ -49,13 +67,21 @@ export default function WalletPage() {
   const hasPending = wallet?.transactions.some((t) => t.status === "pending") ?? false;
   useEffect(() => {
     if (!hasPending) return;
-    const id = setInterval(load, 4000);
+    const id = setInterval(() => load(true), 4000);
     return () => clearInterval(id);
   }, [hasPending, load]);
 
-  const run = async (key: string, fn: () => Promise<void>) => {
+  // Catches network-level failures ("Failed to fetch") that authedFetch throws,
+  // so they show a toast instead of crashing as an unhandled runtime error.
+  const run = async (key: string, failTitle: string, fn: () => Promise<void>) => {
     setBusy(key);
-    try { await fn(); } finally { setBusy(null); }
+    try {
+      await fn();
+    } catch (err) {
+      toaster.create({ title: failTitle, description: errMessage(err), type: "error" });
+    } finally {
+      setBusy(null);
+    }
   };
 
   const errorDetail = async (res: Response, fallback: string) => {
@@ -64,31 +90,59 @@ export default function WalletPage() {
     return err?.detail?.[0]?.msg ?? fallback;
   };
 
-  const deposit = () => run("deposit", async () => {
-    const res = await authedFetch("/api/wallet/deposit", {
-      method: "POST", body: JSON.stringify({ amount: Number(depositAmt), phone }),
-    });
-    if (!res.ok) {
-      toaster.create({ title: "Couldn't start deposit", description: await errorDetail(res, "Amount must be KES 10 – 150,000."), type: "error" });
+  const deposit = () => {
+    if (!validAmount(depositAmt)) {
+      toaster.create({
+        title: "Invalid amount",
+        description: `Amount must be KES ${MIN_AMOUNT} – ${MAX_AMOUNT.toLocaleString()}.`,
+        type: "error",
+      });
       return;
     }
-    toaster.create({ title: "Check your phone", description: "Enter your M-Pesa PIN to complete the deposit.", type: "info" });
-    setDepositAmt("");
-    load();
-  });
+    return run("deposit", "Couldn't start deposit", async () => {
+      const res = await authedFetch("/api/wallet/deposit", {
+        method: "POST", body: JSON.stringify({ amount: Number(depositAmt), phone }),
+      });
+      if (!res.ok) {
+        toaster.create({
+          title: "Couldn't start deposit",
+          description: await errorDetail(res, `Amount must be KES ${MIN_AMOUNT} – ${MAX_AMOUNT.toLocaleString()}.`),
+          type: "error",
+        });
+        return;
+      }
+      toaster.create({ title: "Check your phone", description: "Enter your M-Pesa PIN to complete the deposit.", type: "info" });
+      setDepositAmt("");
+      load();
+    });
+  };
 
-  const withdraw = () => run("withdraw", async () => {
-    const res = await authedFetch("/api/wallet/withdraw", {
-      method: "POST", body: JSON.stringify({ amount: Number(withdrawAmt) }),
-    });
-    if (!res.ok) {
-      toaster.create({ title: "Couldn't withdraw", description: await errorDetail(res, "Amount must be KES 10 – 150,000."), type: "error" });
+  const withdraw = () => {
+    if (!validAmount(withdrawAmt)) {
+      toaster.create({
+        title: "Invalid amount",
+        description: `Amount must be KES ${MIN_AMOUNT} – ${MAX_AMOUNT.toLocaleString()}.`,
+        type: "error",
+      });
       return;
     }
-    toaster.create({ title: "Withdrawal requested", description: "Funds will arrive on your phone shortly.", type: "success" });
-    setWithdrawAmt("");
-    load();
-  });
+    return run("withdraw", "Couldn't withdraw", async () => {
+      const res = await authedFetch("/api/wallet/withdraw", {
+        method: "POST", body: JSON.stringify({ amount: Number(withdrawAmt) }),
+      });
+      if (!res.ok) {
+        toaster.create({
+          title: "Couldn't withdraw",
+          description: await errorDetail(res, `Amount must be KES ${MIN_AMOUNT} – ${MAX_AMOUNT.toLocaleString()}.`),
+          type: "error",
+        });
+        return;
+      }
+      toaster.create({ title: "Withdrawal requested", description: "Funds will arrive on your phone shortly.", type: "success" });
+      setWithdrawAmt("");
+      load();
+    });
+  };
 
   if (loading || !user) return null;
 
@@ -109,7 +163,7 @@ export default function WalletPage() {
             <Input type="tel" placeholder="M-Pesa number, e.g. 0712345678" value={phone}
               onChange={(e) => setPhone(e.target.value)} />
             <HStack>
-              <Input type="number" min={10} max={150000} step={1} placeholder="Amount (KES)"
+              <Input type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1} placeholder="Amount (KES)"
                 value={depositAmt} onChange={(e) => setDepositAmt(e.target.value)} />
               <Button colorPalette="brand" onClick={deposit} loading={busy === "deposit"}
                 disabled={!depositAmt || !phone}>
@@ -125,7 +179,7 @@ export default function WalletPage() {
             <>
               <Text fontSize="sm" color="gray.600" mb={3}>Sent to {wallet.phone_masked}</Text>
               <HStack>
-                <Input type="number" min={10} max={150000} step={1} placeholder="Amount (KES)"
+                <Input type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1} placeholder="Amount (KES)"
                   value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} />
                 <Button colorPalette="brand" onClick={withdraw} loading={busy === "withdraw"} disabled={!withdrawAmt}>
                   Withdraw
