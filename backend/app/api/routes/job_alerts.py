@@ -2,15 +2,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
+from app.core.limiter import limiter
 from app.db.session import get_db
 from app.models.job_alert import JobAlert
 from app.schemas.job_alert import JobAlertCreate
 
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("", status_code=201)
