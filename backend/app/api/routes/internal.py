@@ -44,8 +44,12 @@ async def _trigger_frontend_revalidation():
         logger.warning("Failed to trigger frontend revalidation", exc_info=True)
 
 
+# Plain `def` (not `async def`): FastAPI runs it in a worker thread, so the
+# blocking DB/Redis calls inside the sync no longer stall the event loop that
+# serves every other user's requests. The async scrapers run on a private
+# event loop inside this thread via asyncio.run().
 @router.post("/internal/sync-jobs", dependencies=[Depends(verify_scheduler_secret)])
-async def sync_all_companies(platform: str | None = None, db: Session = Depends(get_db)):
+def sync_all_companies(platform: str | None = None, db: Session = Depends(get_db)):
     """Optional ?platform=greenhouse|lever|workday|bamboohr to split runs across schedulers."""
     query = db.query(Company).filter(
         Company.is_active.is_(True),
@@ -57,30 +61,34 @@ async def sync_all_companies(platform: str | None = None, db: Session = Depends(
 
     results = {"synced": 0, "failed": [], "details": {}}
 
-    for company in companies:
-        try:
-            results["details"][company.name] = await asyncio.wait_for(
-                sync_company(db, company), timeout=PER_COMPANY_TIMEOUT
-            )
-            results["synced"] += 1
-        except Exception as e:
-            db.rollback()  # one failed company must not poison the session for the rest
-            logger.exception(f"Sync failed for {company.name} ({company.source_platform})")
-            results["failed"].append({
-                "company": company.name,
-                "source_platform": company.source_platform,
-                "error": str(e) or e.__class__.__name__,  # TimeoutError has an empty message
-            })
+    async def run():
+        for company in companies:
+            # Read these up front: after db.rollback() the instance is expired
+            name, source_platform = company.name, company.source_platform
+            try:
+                results["details"][name] = await asyncio.wait_for(
+                    sync_company(db, company), timeout=PER_COMPANY_TIMEOUT
+                )
+                results["synced"] += 1
+            except Exception as e:
+                db.rollback()  # one failed company must not poison the session for the rest
+                logger.exception(f"Sync failed for {name} ({source_platform})")
+                results["failed"].append({
+                    "company": name,
+                    "source_platform": source_platform,
+                    "error": str(e) or e.__class__.__name__,  # TimeoutError has an empty message
+                })
 
-    if results["synced"] > 0:
-        # Clear the API cache first, so the frontend revalidation below
-        # refetches fresh data instead of the stale cached results.
-        try:
-            results["cache_keys_cleared"] = invalidate_prefixes("search", "facets", "stats")
-        except Exception:
-            logger.warning("Cache invalidation failed", exc_info=True)
-        await _trigger_frontend_revalidation()
+        if results["synced"] > 0:
+            # Clear the API cache first, so the frontend revalidation below
+            # refetches fresh data instead of the stale cached results.
+            try:
+                results["cache_keys_cleared"] = invalidate_prefixes("search", "facets", "stats")
+            except Exception:
+                logger.warning("Cache invalidation failed", exc_info=True)
+            await _trigger_frontend_revalidation()
 
+    asyncio.run(run())
     return results
 
 
