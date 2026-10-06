@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.job import Job, Company
-from app.services.employer_access import serialize_employer_job
+from app.services.employer_access import serialize_employer_job, user_email_domain
 
 router = APIRouter()
 
@@ -15,8 +15,11 @@ router = APIRouter()
 @router.get("/my-jobs")
 def my_jobs(user=Depends(get_current_user), db: Session = Depends(get_db)):
     """Return listings belonging to the signed-in user's verified company domain."""
-    user_domain = user.get("email", "").split("@")[-1].lower()
-    company = db.query(Company).filter(func.lower(Company.domain) == user_domain).first()
+    domain = user_email_domain(user)
+    if not domain:
+        return []
+
+    company = db.query(Company).filter(func.lower(Company.domain) == domain).first()
     if not company:
         return []
 
@@ -30,13 +33,4 @@ def my_jobs(user=Depends(get_current_user), db: Session = Depends(get_db)):
     # roles at the top of their own dashboard too — mirrors public search sort.
     jobs.sort(key=lambda j: (not _is_featured(j), j.title.lower()))
 
-    return [
-        {
-            "id": str(j.id),
-            "title": j.title,
-            "is_featured": _is_featured(j),
-            "featured_until": j.featured_until.isoformat() if j.featured_until else None,
-        }
-        for j in jobs
-    ]
-    # return [serialize_employer_job(j, now) for j in jobs]
+    return [serialize_employer_job(j, now) for j in jobs]
