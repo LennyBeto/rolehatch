@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     )
 
     frontend_url: str = Field(..., description="Frontend URL", alias="FRONTEND_URL")
+    revalidate_secret: str = Field(
+        default="",
+        description="Shared secret for the frontend /api/revalidate webhook "
+        "(used by internal.py after a sync; leave empty to skip revalidation)",
+        alias="REVALIDATE_SECRET",
+    )
     # NoDecode stops pydantic-settings from json.loads()-ing the raw env string,
     # so plain values like "http://localhost:3000" reach the validator below.
     allowed_origins: Annotated[list[str], NoDecode] = Field(
@@ -50,8 +56,12 @@ class Settings(BaseSettings):
         alias="ALLOWED_ORIGINS",
     )
     scheduler_secret: str = Field(..., description="Scheduler Secret", alias="SCHEDULER_SECRET")
-    db_pool_size: int = Field(default=10, description="SQLAlchemy DB pool size", alias="DB_POOL_SIZE")
-    db_max_overflow: int = Field(default=20, description="SQLAlchemy DB max overflow", alias="DB_MAX_OVERFLOW")
+
+    # Pool sizing is per worker process. Worst case = Cloud Run max-instances x WEB_CONCURRENCY
+    # x (pool_size + max_overflow), so keep these small and point DATABASE_URL at Supabase's
+    # transaction pooler (port 6543) to stay under its connection limits.
+    db_pool_size: int = Field(default=3, description="SQLAlchemy DB pool size", alias="DB_POOL_SIZE")
+    db_max_overflow: int = Field(default=2, description="SQLAlchemy DB max overflow", alias="DB_MAX_OVERFLOW")
     db_pool_timeout: int = Field(default=30, description="SQLAlchemy DB pool timeout", alias="DB_POOL_TIMEOUT")
     web_concurrency: int = Field(default=2, description="Uvicorn worker count", alias="WEB_CONCURRENCY")
 
@@ -68,6 +78,8 @@ class Settings(BaseSettings):
         alias="CHAT_MODEL",
     )
 
+
+    # ── Perchie chatbot anthropic ──────────────────────────────────────
     # Previous provider: Anthropic — kept for future use. To switch back, uncomment these,
     # restore the Anthropic call in services/chatbot.py, and set CHAT_MODEL to a Claude model.
     # anthropic_api_key: str = Field(default="", description="Anthropic API key for Perchie", alias="ANTHROPIC_API_KEY")
