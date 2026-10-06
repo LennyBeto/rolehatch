@@ -4,10 +4,10 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from app.core.cache import invalidate_job_caches
+from app.core.domains import get_employer_domain
+from app.core.limiter import limiter
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.job import Job, Company
@@ -15,11 +15,9 @@ from app.schemas.employer_job import JobPostCreate, JobPostUpdate
 from app.services.employer_access import (
     get_manageable_job,
     serialize_employer_job,
-    user_email_domain,
 )
 
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("", status_code=201)
@@ -30,9 +28,7 @@ def create_job_posting(
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    domain = user_email_domain(user)
-    if not domain:
-        raise HTTPException(400, "Could not determine your company domain from your account email")
+    domain = get_employer_domain(user)  # 400 if no email, 403 if personal mailbox (Gmail, etc.)
 
     company = db.query(Company).filter(func.lower(Company.domain) == domain).first()
     if not company:
