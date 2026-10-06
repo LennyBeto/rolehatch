@@ -58,7 +58,8 @@ export default function QuickFilterChips() {
       else params.set("quick_filter", value);
     }
 
-    router.push(`/?${params.toString()}`);
+    // Jump straight to the results instead of the top of the page
+    router.push(`/?${params.toString()}#listings`);
   };
 
   return (

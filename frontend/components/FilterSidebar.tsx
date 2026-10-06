@@ -45,7 +45,8 @@ export default function FilterSidebar() {
       if (value === null || value === "") params.delete(key);
       else params.set(key, value);
     }
-    router.push(`/?${params.toString()}`);
+    // Land on the results, not the header/hero
+    router.push(`/?${params.toString()}#listings`);
   };
 
   const handleRemoteTypeChange = (values: string[]) => {
