@@ -1,15 +1,13 @@
 # backend/app/api/routes/contact.py
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
+from app.core.limiter import limiter
 from app.db.session import get_db
 from app.models.contact_message import ContactMessage
 from app.schemas.contact import ContactMessageCreate
 
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("", status_code=201)
