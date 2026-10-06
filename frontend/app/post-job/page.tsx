@@ -95,7 +95,8 @@ export default function PostJobPage() {
     <Box maxW="600px" mx="auto" py={12} px={4}>
       <Heading size="lg" color="text" mb={1}>Post a Job</Heading>
       <Text color="gray.600" mb={8}>
-        Free to post. Your listing is tied to your account's email domain.
+        Free to post. Sign in with your company email — your listing is tied to its domain,
+        so personal addresses (Gmail, Outlook, Yahoo, etc.) can't post.
       </Text>
 
       <Box as="form" onSubmit={handleSubmit}>
