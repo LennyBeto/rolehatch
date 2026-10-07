@@ -1,19 +1,28 @@
 # backend/app/services/pipeline.py
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+import asyncio
+import hashlib
+import html
+import logging
+import re
+import uuid
+
 from dateutil import parser as date_parser
-from app.models.job import Job, Company
-from app.core.cache import redis
+from fastapi.concurrency import run_in_threadpool
+from sqlalchemy import case, func
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import Session
+
 from app.core.embeddings import embed_text
-from app.services.scrapers.base import seen_key
+from app.db.session import SessionLocal
+from app.models.job import Job, Company
 from app.services.scrapers.greenhouse import GreenhouseScraper
 from app.services.scrapers.lever import LeverScraper
 from app.services.scrapers.workday import WorkdayScraper
 from app.services.scrapers.bamboohr import BambooHRScraper
-import html
-import logging
-import re
+from app.services.scrapers.ashby import AshbyScraper
+from app.services.scrapers.smartrecruiters import SmartRecruitersScraper
+from app.services.scrapers.workable import WorkableScraper
+from app.services.scrapers.recruitee import RecruiteeScraper
 
 logger = logging.getLogger("perchrole.pipeline")
 
@@ -30,6 +39,15 @@ TECH_KEYWORDS = [
 SENIOR_KEYWORDS = ["senior", "staff", "principal", "lead", "director", "vp", "head of"]
 ENTRY_KEYWORDS = ["junior", "entry", "associate", "intern", "graduate"]
 
+UPSERT_CHUNK = 200
+EMBED_CONCURRENCY = 5
+MAX_EMBEDS_PER_RUN = 300   # per company; the rest are embedded on the next hourly run
+# If a scrape returns < 30% of a company's currently-active jobs, treat it as a
+# partial/failed fetch: upsert what we got but do NOT deactivate anything.
+MIN_SCRAPE_RATIO = 0.3
+
+# Each entry receives (company, skip_urls). skip_urls = URLs that already have a
+# description in the DB, so detail-based scrapers can skip re-fetching them.
 SCRAPERS = {
     "greenhouse": lambda c, skip: GreenhouseScraper().scrape(c.board_token, skip_urls=skip),
     "lever": lambda c, skip: LeverScraper().scrape(c.board_token, skip_urls=skip),
@@ -37,14 +55,18 @@ SCRAPERS = {
         *(c.board_token.split(":") + [None, None, None])[:3], skip_urls=skip
     ),
     "bamboohr": lambda c, skip: BambooHRScraper().scrape(c.board_token, skip_urls=skip),
+    "ashby": lambda c, skip: AshbyScraper().scrape(c.board_token),
+    "smartrecruiters": lambda c, skip: SmartRecruitersScraper().scrape(c.board_token),
+    "workable": lambda c, skip: WorkableScraper().scrape(c.board_token),
+    "recruitee": lambda c, skip: RecruiteeScraper().scrape(c.board_token),
 }
 
 
-def _parse_posted_at(raw_value: str | None):
+def _parse_posted_at(raw_value):
     if not raw_value:
         return None
     try:
-        return date_parser.isoparse(raw_value)
+        return date_parser.isoparse(str(raw_value))
     except (ValueError, TypeError):
         return None
 
@@ -100,113 +122,164 @@ def _extract_tech_stack(description: str | None) -> list[str]:
     ]
 
 
-async def sync_company(db: Session, company: Company) -> dict:
+def _external_id(url: str) -> str:
+    # external_id is VARCHAR(255); hash overly long URLs so the id stays stable.
+    return url if len(url) <= 255 else "h:" + hashlib.sha1(url.encode()).hexdigest()
+
+
+def _chunks(items: list, size: int):
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
+
+
+def _load_known_state(company_id, platform: str) -> tuple[set[str], set[str], set[str]]:
+    """Returns (described_urls, embedded_urls, described_and_embedded_urls)
+    for this company's active jobs. Runs in a threadpool with its own session."""
+    db = SessionLocal()
+    try:
+        rows = db.query(
+            Job.source_url,
+            Job.description.isnot(None),
+            Job.embedding.isnot(None),
+        ).filter(
+            Job.company_id == company_id,
+            Job.source == platform,
+            Job.is_active.is_(True),
+        ).all()
+    finally:
+        db.close()
+    described = {u for u, has_desc, _ in rows if has_desc}
+    embedded = {u for u, _, has_emb in rows if has_emb}
+    return described, embedded, described & embedded
+
+
+async def fetch_company_jobs(company: Company) -> list[dict]:
+    """Network step (scrape + embeddings) — safe to run concurrently across companies.
+    Attaches j["embedding"] only for jobs that need one."""
     scrape_fn = SCRAPERS.get(company.source_platform)
     if not scrape_fn:
         raise ValueError(f"No scraper registered for source_platform={company.source_platform!r}")
+    if not company.board_token:
+        raise ValueError(f"{company.name} has no board_token")
 
-    # Jobs that already have a description: detail-based scrapers (Workday,
-    # BambooHR) skip re-fetching these, and the upsert below preserves them.
-    known_rows = db.query(Job.external_id).filter(
-        Job.company_id == company.id,
-        Job.source == company.source_platform,
-        Job.is_active.is_(True),
-        Job.description.isnot(None),
-    ).all()
-    known_urls = {r[0] for r in known_rows}
+    described, embedded, described_embedded = await run_in_threadpool(
+        _load_known_state, company.id, company.source_platform
+    )
 
-    raw_jobs = await scrape_fn(company, known_urls)  # let real exceptions bubble up to internal.py's catch
+    raw_jobs = await scrape_fn(company, described)
 
-    # Guard: an empty result is almost always a scrape failure, not "0 open roles".
-    # Deactivating everything here would wipe the company's listings.
-    if not raw_jobs:
-        logger.warning("Empty scrape for %s — skipping deactivation", company.name)
-        return {"fetched": 0, "skipped": True}
+    # Embed only what's new, or what just gained a description. Embedding
+    # failures return None and never fail the sync (embed_text's contract).
+    sem = asyncio.Semaphore(EMBED_CONCURRENCY)
+    to_embed = []
+    for j in raw_jobs:
+        url, title = j.get("url"), j.get("title")
+        if not url or not title:
+            continue
+        description = _strip_html(j.get("content"))
+        if url not in embedded or (description and url not in described_embedded):
+            to_embed.append((j, description or title))
+        if len(to_embed) >= MAX_EMBEDS_PER_RUN:
+            break
 
-    seen_ids: list[str] = []
-    pending_redis_keys: list[str] = []
-    upserted = 0
+    async def _embed(j: dict, text: str):
+        async with sem:
+            j["embedding"] = await embed_text(text)
+
+    if to_embed:
+        await asyncio.gather(*(_embed(j, text) for j, text in to_embed))
+
+    return raw_jobs
+
+
+def persist_company_jobs(db: Session, company: Company, raw_jobs: list[dict]) -> dict:
+    """DB step: bulk upsert per chunk + safe stale deactivation."""
+    platform = company.source_platform
+    rows: dict[str, dict] = {}
+
+    for j in raw_jobs:
+        url, title = j.get("url"), j.get("title")
+        if not url or not title:
+            continue
+        ext_id = _external_id(url)
+        location = j.get("location")
+        location = location[:255] if isinstance(location, str) and location else None
+        description = _strip_html(j.get("content"))
+        rows[ext_id] = {
+            "id": uuid.uuid4(),
+            "company_id": company.id,
+            "title": title[:300],
+            "location": location,
+            "source": platform,
+            "source_url": url[:1000],
+            "external_id": ext_id,
+            "is_active": True,
+            "is_featured": False,
+            "posted_at": _parse_posted_at(j.get("posted_at")),
+            "description": description,
+            "level": _infer_level(title),
+            "remote_type": j.get("remote_type") or _infer_remote_type(location),
+            "tech_stack": _extract_tech_stack(description),
+            "embedding": j.get("embedding"),
+        }
+
+    # An empty result is almost always a scrape failure, not "0 open roles".
+    if not rows:
+        logger.warning("Empty scrape for %s (%s) — skipping upsert and deactivation", company.name, platform)
+        return {"upserted": 0, "deactivated": 0, "skipped": True}
 
     try:
-        for j in raw_jobs:
-            external_id = j["url"]
-            seen_ids.append(external_id)
-
-            redis_key = seen_key(company.source_platform, external_id)
-            if redis.get(redis_key):
-                continue
-
-            posted_at = _parse_posted_at(j.get("posted_at"))
-            description = _strip_html(j.get("content"))
-            level = _infer_level(j["title"])
-            remote_type = _infer_remote_type(j.get("location"))
-            tech_stack = _extract_tech_stack(description)
-            # Embed on description when available, falling back to title so
-            # sparse postings (Workday/BambooHR often omit content) still get
-            # a usable vector for match scoring. embed_text returns None on
-            # any failure — never blocks or fails the sync run.
-            embedding = await embed_text(description or j["title"])
-
-            stmt = pg_insert(Job).values(
-                company_id=company.id,
-                title=j["title"],
-                location=j.get("location"),
-                source=company.source_platform,
-                source_url=j["url"],
-                external_id=external_id,
-                is_active=True,
-                posted_at=posted_at,
-                description=description,
-                level=level,
-                remote_type=remote_type,
-                tech_stack=tech_stack,
-                embedding=embedding,
-            )
-
-            update_set = {
-                "title": j["title"],
-                "location": j.get("location"),
-                "is_active": True,
-                "scraped_at": func.now(),
-                "level": level,
-                "remote_type": remote_type,
-            }
-            # Never overwrite stored values with empty ones when a scraper
-            # skipped the detail call or the embedding request failed.
-            if posted_at:
-                update_set["posted_at"] = posted_at
-            if description:
-                update_set["description"] = description
-                update_set["tech_stack"] = tech_stack
-                if embedding is not None:
-                    update_set["embedding"] = embedding
-
-            db.execute(stmt.on_conflict_do_update(
+        for chunk in _chunks(list(rows.values()), UPSERT_CHUNK):
+            ins = pg_insert(Job).values(chunk)
+            ins = ins.on_conflict_do_update(
                 index_elements=["source", "external_id"],
-                set_=update_set,
-            ))
-            upserted += 1
+                set_={
+                    "title": ins.excluded.title,
+                    "location": ins.excluded.location,
+                    "level": ins.excluded.level,
+                    "remote_type": ins.excluded.remote_type,
+                    "is_active": True,          # reactivates jobs that reappeared
+                    "scraped_at": func.now(),   # proves the listing was seen this run
+                    # Never overwrite stored values with empty ones when a scraper
+                    # skipped the detail call or the embedding request failed.
+                    "posted_at": func.coalesce(ins.excluded.posted_at, Job.posted_at),
+                    "description": func.coalesce(ins.excluded.description, Job.description),
+                    "tech_stack": case(
+                        (ins.excluded.description.isnot(None), ins.excluded.tech_stack),
+                        else_=Job.tech_stack,
+                    ),
+                    "embedding": func.coalesce(ins.excluded.embedding, Job.embedding),
+                },
+            )
+            db.execute(ins)
 
-            # Only mark as seen once the job has a description (or already had
-            # one), so description-less jobs are retried until detail data arrives.
-            if description or external_id in known_urls:
-                pending_redis_keys.append(redis_key)
-
-        db.query(Job).filter(
+        scope = (
             Job.company_id == company.id,
-            Job.source == company.source_platform,
-            Job.external_id.notin_(seen_ids),
+            Job.source == platform,        # never touch 'direct' employer-posted jobs
             Job.is_active.is_(True),
-        ).update({"is_active": False}, synchronize_session=False)
-
+        )
+        prev_active = db.query(func.count(Job.id)).filter(*scope).scalar() or 0
+        deactivated = 0
+        if prev_active >= 20 and len(rows) < prev_active * MIN_SCRAPE_RATIO:
+            logger.warning(
+                "Suspiciously small scrape for %s: %d vs %d active — skipping deactivation",
+                company.name, len(rows), prev_active,
+            )
+        else:
+            deactivated = (
+                db.query(Job)
+                .filter(*scope, Job.external_id.notin_(list(rows.keys())))
+                .update({"is_active": False}, synchronize_session=False)
+            )
         db.commit()
     except Exception:
         db.rollback()  # never leave a failed transaction for the next company
         raise
 
-    # Mark as seen ONLY after the commit succeeded, so a failed or timed-out
-    # sync never causes jobs to be skipped for the next 24 hours.
-    for key in pending_redis_keys:
-        redis.set(key, "1", ex=86400)
+    return {"fetched": len(raw_jobs), "upserted": len(rows), "deactivated": deactivated}
 
-    return {"fetched": len(raw_jobs), "upserted": upserted}
+
+async def sync_company(db: Session, company: Company) -> dict:
+    """Single-company manual sync (the hourly run uses fetch + persist directly)."""
+    raw_jobs = await fetch_company_jobs(company)
+    return persist_company_jobs(db, company, raw_jobs)
