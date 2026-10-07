@@ -7,7 +7,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pgvector.sqlalchemy import Vector
 from app.db.base import Base
 
-source_enum = ENUM("greenhouse", "lever", "workday", "bamboohr", "direct", name="job_source")
+# Keep in sync with the DB enum: adding a value here also needs an Alembic migration
+# (see e41a7c9d2b50_add_new_job_sources.py). Autogenerate does not detect enum changes.
+source_enum = ENUM(
+    "greenhouse", "lever", "workday", "bamboohr",
+    "ashby", "smartrecruiters", "workable", "recruitee",
+    "direct", name="job_source",
+)
 
 class Company(Base):
     __tablename__ = "companies"
@@ -16,7 +22,7 @@ class Company(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     domain: Mapped[str | None] = mapped_column(String(255), unique=True)
     board_token: Mapped[str | None] = mapped_column(String(255))
-    source_platform: Mapped[str | None] = mapped_column(String(30))  # "greenhouse"/"lever"/"workday"/"bamboohr"
+    source_platform: Mapped[str | None] = mapped_column(String(30))  # greenhouse/lever/workday/bamboohr/ashby/smartrecruiters/workable/recruitee/direct
     industry: Mapped[str | None] = mapped_column(String(120))
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
