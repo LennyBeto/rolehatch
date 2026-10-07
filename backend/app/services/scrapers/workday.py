@@ -16,7 +16,15 @@ class WorkdayScraper(BaseScraper):
     Descriptions live on a per-job detail endpoint:
     https://{tenant}.wd{n}.myworkdayjobs.com/wday/cxs/{tenant}/{site}{externalPath}
     """
-    async def scrape(self, tenant: str, wd_number: str, site: str, max_pages: int = 5):
+    async def scrape(
+        self,
+        tenant: str,
+        wd_number: str,
+        site: str,
+        max_pages: int = 5,
+        skip_urls: set[str] | None = None,
+        max_details: int = 100,
+    ):
         if not tenant or not wd_number or not site:
             raise ValueError(
                 f"Workday scraper needs 'tenant:wd_number:site' — got tenant={tenant!r}, "
@@ -27,12 +35,16 @@ class WorkdayScraper(BaseScraper):
         jobs = []
         offset = 0
         limit = 20
+        details_fetched = 0
 
-        async with httpx.AsyncClient(headers={"User-Agent": self.user_agent}, timeout=15) as client:
+        async with httpx.AsyncClient(
+            headers={"User-Agent": self.user_agent}, timeout=20, follow_redirects=True
+        ) as client:
             for _ in range(max_pages):
                 resp = await client.post(base_url, json={"limit": limit, "offset": offset, "searchText": ""})
                 if resp.status_code != 200:
-                    break
+                    # Raise (don't break): a partial board would deactivate still-open jobs.
+                    raise RuntimeError(f"Workday {tenant} returned HTTP {resp.status_code} at offset {offset}")
                 data = resp.json()
                 postings = data.get("jobPostings", [])
                 if not postings:
@@ -48,11 +60,17 @@ class WorkdayScraper(BaseScraper):
                         "posted_at": None,
                         "content": None,
                     }
-                    # Only fetch detail for new postings — the pipeline skips seen ones anyway
-                    if external_path and not self.already_synced("workday", job_url):
+                    # Only fetch detail for postings that still lack a description,
+                    # capped per run so a first sync can't exceed the timeout.
+                    if (
+                        external_path
+                        and details_fetched < max_details
+                        and not self.should_skip_detail("workday", job_url, skip_urls)
+                    ):
                         info = await self._fetch_detail(client, f"{host}/wday/cxs/{tenant}/{site}{external_path}")
                         job["content"] = info.get("jobDescription")
                         job["posted_at"] = info.get("startDate")  # ISO date, e.g. "2026-09-10"
+                        details_fetched += 1
                         await self.polite_delay(1.0)
                     jobs.append(job)
                 offset += limit
