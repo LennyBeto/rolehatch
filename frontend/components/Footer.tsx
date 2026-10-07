@@ -17,6 +17,7 @@ const COMPANY_LINKS = [
   { label: "Blog", href: "/blog" },
   { label: "Post a Job", href: "/dashboard" },
   { label: "Pricing", href: "/pricing" },
+  { label: "FAQs", href: "/faq" },
 ];
 
 const LEGAL_LINKS = [
