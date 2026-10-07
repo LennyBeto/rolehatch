@@ -54,6 +54,16 @@ def invalidate_job_caches(job_id: str | None = None) -> None:
         logger.exception("Cache invalidation failed")
 
 
+def invalidate_listing_caches() -> int:
+    """Called after each scheduled sync. Also clears every cached job detail
+    (job:*), since a sync can deactivate or update any listing.
+
+    Raises on failure; the caller in internal.py catches and logs it so a
+    cache problem never fails the sync itself.
+    """
+    return invalidate_prefixes("search", "facets", "stats", "job")
+
+
 def clear_all_cache():
     """Wipe every key in the Redis instance — instant during development
     when you need fresh data to reflect a schema/scraper change without
