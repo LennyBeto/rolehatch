@@ -1,7 +1,7 @@
 // frontend/app/wallet/page.tsx
 "use client";
-import { Box, Heading, Text, Stack, Button, Input, HStack, Badge, Flex } from "@chakra-ui/react";
-import { useCallback, useEffect, useState } from "react";
+import { Box, Heading, Text, Stack, Button, Input, HStack, Badge, Flex, SimpleGrid } from "@chakra-ui/react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { authedFetch } from "@/lib/api";
@@ -34,9 +34,11 @@ export default function WalletPage() {
   const router = useRouter();
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [phone, setPhone] = useState("");
-  const [depositAmt, setDepositAmt] = useState("");
+  const [mpesaAmt, setMpesaAmt] = useState("");
+  const [paystackAmt, setPaystackAmt] = useState("");
   const [withdrawAmt, setWithdrawAmt] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const verifiedRef = useRef(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/");
@@ -61,6 +63,33 @@ export default function WalletPage() {
 
   useEffect(() => {
     if (user) load();
+  }, [user, load]);
+
+  // Paystack redirects back to /wallet?reference=...&trxref=... — verify once, then clean the URL.
+  useEffect(() => {
+    if (!user || verifiedRef.current) return;
+    const reference = new URLSearchParams(window.location.search).get("reference");
+    if (!reference) return;
+    verifiedRef.current = true;
+    (async () => {
+      try {
+        const res = await authedFetch(`/api/wallet/paystack/verify/${encodeURIComponent(reference)}`);
+        if (!res.ok) throw new Error(`Verification failed (${res.status})`);
+        const { status } = await res.json();
+        if (status === "completed") {
+          toaster.create({ title: "Deposit successful", description: "Your wallet has been credited.", type: "success" });
+        } else if (status === "failed") {
+          toaster.create({ title: "Payment failed", description: "No money was taken. Please try again.", type: "error" });
+        } else {
+          toaster.create({ title: "Payment pending", description: "We'll update your balance once Paystack confirms.", type: "info" });
+        }
+      } catch (err) {
+        toaster.create({ title: "Couldn't verify payment", description: errMessage(err), type: "error" });
+      } finally {
+        window.history.replaceState({}, "", "/wallet");
+        load();
+      }
+    })();
   }, [user, load]);
 
   // While anything is pending (PIN prompt / payout), poll until the callback lands.
@@ -90,18 +119,21 @@ export default function WalletPage() {
     return err?.detail?.[0]?.msg ?? fallback;
   };
 
-  const deposit = () => {
-    if (!validAmount(depositAmt)) {
-      toaster.create({
-        title: "Invalid amount",
-        description: `Amount must be KES ${MIN_AMOUNT} – ${MAX_AMOUNT.toLocaleString()}.`,
-        type: "error",
-      });
+  const notifyInvalidAmount = () =>
+    toaster.create({
+      title: "Invalid amount",
+      description: `Amount must be KES ${MIN_AMOUNT} – ${MAX_AMOUNT.toLocaleString()}.`,
+      type: "error",
+    });
+
+  const depositMpesa = () => {
+    if (!validAmount(mpesaAmt)) {
+      notifyInvalidAmount();
       return;
     }
-    return run("deposit", "Couldn't start deposit", async () => {
+    return run("mpesa-deposit", "Couldn't start deposit", async () => {
       const res = await authedFetch("/api/wallet/deposit", {
-        method: "POST", body: JSON.stringify({ amount: Number(depositAmt), phone }),
+        method: "POST", body: JSON.stringify({ amount: Number(mpesaAmt), phone }),
       });
       if (!res.ok) {
         toaster.create({
@@ -112,18 +144,36 @@ export default function WalletPage() {
         return;
       }
       toaster.create({ title: "Check your phone", description: "Enter your M-Pesa PIN to complete the deposit.", type: "info" });
-      setDepositAmt("");
+      setMpesaAmt("");
       load();
+    });
+  };
+
+  const depositPaystack = () => {
+    if (!validAmount(paystackAmt)) {
+      notifyInvalidAmount();
+      return;
+    }
+    return run("paystack-deposit", "Couldn't start Paystack checkout", async () => {
+      const res = await authedFetch("/api/wallet/paystack/initialize", {
+        method: "POST", body: JSON.stringify({ amount: Math.round(Number(paystackAmt)) }),
+      });
+      if (!res.ok) {
+        toaster.create({
+          title: "Couldn't start Paystack checkout",
+          description: await errorDetail(res, "Please try again."),
+          type: "error",
+        });
+        return;
+      }
+      const { authorization_url } = await res.json();
+      window.location.href = authorization_url;
     });
   };
 
   const withdraw = () => {
     if (!validAmount(withdrawAmt)) {
-      toaster.create({
-        title: "Invalid amount",
-        description: `Amount must be KES ${MIN_AMOUNT} – ${MAX_AMOUNT.toLocaleString()}.`,
-        type: "error",
-      });
+      notifyInvalidAmount();
       return;
     }
     return run("withdraw", "Couldn't withdraw", async () => {
@@ -147,52 +197,84 @@ export default function WalletPage() {
   if (loading || !user) return null;
 
   return (
-    <Box maxW="700px" mx="auto" mt={12} px={4}>
+    <Box maxW="900px" mx="auto" mt={12} px={4}>
       <Heading size="lg" mb={1}>Wallet</Heading>
-      <Text color="gray.600" mb={6}>Deposit and withdraw with M-Pesa.</Text>
+      <Text color="gray.600" mb={6}>Add funds with M-Pesa or card/bank. Withdraw to M-Pesa.</Text>
 
       <Box p={5} bg="surface" border="1px solid #E5E3DD" borderRadius="lg" mb={6}>
         <Text fontSize="sm" color="gray.600">Available balance</Text>
         <Heading size="2xl" color="brand.500">{wallet ? fmt(wallet.balance, wallet.currency) : "—"}</Heading>
       </Box>
 
-      <Stack gap={6} mb={8}>
+      <SimpleGrid columns={{ base: 1, md: 2 }} gap={6} mb={8} alignItems="start">
+        {/* ── M-Pesa card ── */}
         <Box p={5} bg="surface" border="1px solid #E5E3DD" borderRadius="lg">
-          <Heading size="sm" mb={3}>Deposit</Heading>
-          <Stack gap={3}>
+          <Flex justify="space-between" align="center" mb={1}>
+            <Heading size="md">M-Pesa</Heading>
+            <Badge colorPalette="green" variant="subtle">Deposit &amp; Withdraw</Badge>
+          </Flex>
+          <Text fontSize="sm" color="gray.600" mb={4}>Pay with an STK push to your phone.</Text>
+
+          <Heading size="xs" textTransform="uppercase" color="gray.500" mb={2}>Deposit</Heading>
+          <Stack gap={3} mb={5}>
             <Input type="tel" placeholder="M-Pesa number, e.g. 0712345678" value={phone}
               onChange={(e) => setPhone(e.target.value)} />
             <HStack>
               <Input type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1} placeholder="Amount (KES)"
-                value={depositAmt} onChange={(e) => setDepositAmt(e.target.value)} />
-              <Button colorPalette="brand" onClick={deposit} loading={busy === "deposit"}
-                disabled={!depositAmt || !phone}>
+                value={mpesaAmt} onChange={(e) => setMpesaAmt(e.target.value)} />
+              <Button colorPalette="brand" onClick={depositMpesa} loading={busy === "mpesa-deposit"}
+                disabled={!mpesaAmt || !phone}>
                 Deposit
               </Button>
             </HStack>
           </Stack>
+
+          <Box borderTop="1px solid #E5E3DD" pt={4}>
+            <Heading size="xs" textTransform="uppercase" color="gray.500" mb={2}>Withdraw</Heading>
+            {wallet?.phone_masked ? (
+              <>
+                <Text fontSize="sm" color="gray.600" mb={3}>Sent to {wallet.phone_masked}</Text>
+                <HStack>
+                  <Input type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1} placeholder="Amount (KES)"
+                    value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} />
+                  <Button colorPalette="brand" onClick={withdraw} loading={busy === "withdraw"}
+                    disabled={!withdrawAmt}>
+                    Withdraw
+                  </Button>
+                </HStack>
+              </>
+            ) : (
+              <Text fontSize="sm" color="gray.600">
+                Make an M-Pesa deposit first. Withdrawals go to the M-Pesa number you deposit from.
+              </Text>
+            )}
+          </Box>
         </Box>
 
+        {/* ── Paystack card ── */}
         <Box p={5} bg="surface" border="1px solid #E5E3DD" borderRadius="lg">
-          <Heading size="sm" mb={3}>Withdraw</Heading>
-          {wallet?.phone_masked ? (
-            <>
-              <Text fontSize="sm" color="gray.600" mb={3}>Sent to {wallet.phone_masked}</Text>
-              <HStack>
-                <Input type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1} placeholder="Amount (KES)"
-                  value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} />
-                <Button colorPalette="brand" onClick={withdraw} loading={busy === "withdraw"} disabled={!withdrawAmt}>
-                  Withdraw
-                </Button>
-              </HStack>
-            </>
-          ) : (
-            <Text fontSize="sm" color="gray.600">
-              Make a deposit first. Withdrawals go to the M-Pesa number you deposit from.
+          <Flex justify="space-between" align="center" mb={1}>
+            <Heading size="md">Paystack</Heading>
+            <Badge colorPalette="blue" variant="subtle">Deposit only</Badge>
+          </Flex>
+          <Text fontSize="sm" color="gray.600" mb={4}>Pay by card or bank through Paystack's secure checkout.</Text>
+
+          <Heading size="xs" textTransform="uppercase" color="gray.500" mb={2}>Deposit</Heading>
+          <Stack gap={3}>
+            <HStack>
+              <Input type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1} placeholder="Amount (KES)"
+                value={paystackAmt} onChange={(e) => setPaystackAmt(e.target.value)} />
+              <Button colorPalette="brand" onClick={depositPaystack} loading={busy === "paystack-deposit"}
+                disabled={!paystackAmt}>
+                Pay
+              </Button>
+            </HStack>
+            <Text fontSize="xs" color="gray.500">
+              You'll be redirected to Paystack to complete payment, then brought back here.
             </Text>
-          )}
+          </Stack>
         </Box>
-      </Stack>
+      </SimpleGrid>
 
       <Heading size="sm" mb={3}>Transactions</Heading>
       <Stack gap={2}>
