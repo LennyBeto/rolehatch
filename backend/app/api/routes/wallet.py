@@ -1,11 +1,13 @@
-# backend/app/api/routes/wallet.py  (M-Pesa + Paystack)
+# backend/app/api/routes/wallet.py  (M-Pesa + Paystack + PayPal)
 import hmac
 import json
 import logging
 import uuid
+from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.concurrency import run_in_threadpool
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
@@ -16,14 +18,16 @@ from app.core.config import settings
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.wallet import Wallet, WalletTransaction
-from app.schemas.wallet import DepositIn, PaystackDepositIn, WithdrawIn
-from app.services import mpesa, paystack
+from app.schemas.wallet import DepositIn, PaypalDepositIn, PaystackDepositIn, WithdrawIn
+from app.services import mpesa, paypal, paystack
 
 logger = logging.getLogger("perchrole.wallet")
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 ACK = {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+PAYPAL_PREFIX = "PP-"
 
 
 # ── helpers ──────────────────────────────────────────────
@@ -95,6 +99,72 @@ def _settle_paystack(db: Session, reference: str, data: dict) -> str:
             db.commit()
         return "failed"
     return "pending"  # abandoned / ongoing
+
+
+def _paypal_tx(db: Session, order_id: str, lock: bool = False):
+    q = select(WalletTransaction).where(
+        WalletTransaction.checkout_request_id == f"{PAYPAL_PREFIX}{order_id}",
+        WalletTransaction.type == "deposit",
+    )
+    if lock:
+        q = q.with_for_update()
+    return db.execute(q).scalar_one_or_none()
+
+
+def _owned_paypal_tx(db: Session, user_id: str, order_id: str):
+    wallet = _get_or_create_wallet(db, UUID(user_id))
+    db.commit()
+    tx = _paypal_tx(db, order_id)
+    if not tx or tx.wallet_id != wallet.id:
+        raise HTTPException(404, "Transaction not found")
+    return tx
+
+
+def _settle_paypal(db: Session, order_id: str, order: dict) -> str:
+    """Idempotent. Capture endpoint and webhook both call this; the row lock + status
+    check guarantee an order credits the wallet at most once."""
+    tx = _paypal_tx(db, order_id, lock=True)
+    if not tx:
+        logger.warning("PayPal order %s has no matching transaction", order_id)
+        return "unknown"
+    if tx.status == "completed":
+        return "completed"
+
+    unit = (order.get("purchase_units") or [{}])[0]
+    captures = (unit.get("payments") or {}).get("captures") or []
+    cap = captures[0] if captures else {}
+    cap_status = cap.get("status")
+
+    if cap_status == "COMPLETED":
+        # custom_id was set server-side at order creation as "<tx_id>:<usd_cents>".
+        custom = cap.get("custom_id") or unit.get("custom_id") or ""
+        try:
+            tx_part, cents_part = custom.split(":")
+            expected = Decimal(int(cents_part)) / 100
+        except ValueError:
+            logger.error("PayPal order %s has malformed custom_id %r", order_id, custom)
+            return "pending"
+        amount = cap.get("amount") or {}
+        try:
+            paid = Decimal(str(amount.get("value")))
+        except InvalidOperation:
+            paid = Decimal(-1)
+        if tx_part != str(tx.id) or amount.get("currency_code") != "USD" or paid != expected:
+            logger.error("PayPal amount/currency/tx mismatch on tx %s: %s", tx.id, cap)
+            return "pending"  # never credit an unverified amount; left for manual review
+        wallet = db.execute(select(Wallet).where(Wallet.id == tx.wallet_id).with_for_update()).scalar_one()
+        wallet.balance += tx.amount
+        tx.status = "completed"
+        tx.mpesa_receipt = cap.get("id")  # PayPal capture ID shows as the receipt
+        db.commit()
+        return "completed"
+
+    if cap_status in ("DECLINED", "FAILED") or order.get("status") == "VOIDED":
+        if tx.status == "pending":
+            tx.status = "failed"
+            db.commit()
+        return "failed"
+    return "pending"
 
 
 # ── user endpoints ───────────────────────────────────────
@@ -264,6 +334,109 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db)):
         reference = data.get("reference")
         if reference and str(reference).startswith("PSK"):
             _settle_paystack(db, reference, data)
+    return {"received": True}
+
+
+# ── PayPal (USD-converted deposits) ──────────────────────
+@router.get("/paypal/rate")
+def paypal_rate(user=Depends(get_current_user)):
+    return {"kes_per_usd": settings.paypal_kes_per_usd}
+
+
+@router.post("/paypal/initialize")
+@limiter.limit("5/minute")
+def paypal_initialize(
+    request: Request,
+    payload: PaypalDepositIn,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not settings.paypal_client_id or not settings.paypal_client_secret:
+        raise HTTPException(503, "PayPal is not configured")
+    try:
+        usd_cents = paypal.kes_to_usd_cents(payload.amount)
+    except paypal.PaypalError as e:
+        raise HTTPException(503, str(e))
+
+    wallet = _get_or_create_wallet(db, UUID(user["sub"]))
+    tx = WalletTransaction(wallet_id=wallet.id, type="deposit", amount=payload.amount, status="pending")
+    db.add(tx)
+    db.commit()
+    db.refresh(tx)
+
+    try:
+        order = paypal.create_order(
+            usd_cents=usd_cents,
+            custom_id=f"{tx.id}:{usd_cents}",
+            return_url=f"{settings.frontend_url}/wallet?paypal=return",
+            cancel_url=f"{settings.frontend_url}/wallet?paypal=cancel",
+        )
+    except paypal.PaypalError:
+        logger.exception("PayPal create order failed for tx %s", tx.id)
+        tx.status = "failed"
+        db.commit()
+        raise HTTPException(502, "Couldn't start PayPal checkout — please try again")
+
+    tx.checkout_request_id = f"{PAYPAL_PREFIX}{order['id']}"
+    db.commit()
+    return {"approval_url": order["approval_url"], "usd_amount": f"{usd_cents / 100:.2f}"}
+
+
+@router.post("/paypal/capture/{order_id}")
+@limiter.limit("10/minute")
+def paypal_capture(request: Request, order_id: str, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    _owned_paypal_tx(db, user["sub"], order_id)
+    try:
+        order = paypal.capture_order(order_id)
+    except paypal.PaypalError:
+        logger.exception("PayPal capture failed for order %s", order_id)
+        raise HTTPException(502, "Couldn't complete PayPal payment — please try again")
+    return {"status": _settle_paypal(db, order_id, order)}
+
+
+@router.post("/paypal/cancel/{order_id}")
+def paypal_cancel(order_id: str, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    _owned_paypal_tx(db, user["sub"], order_id)
+    tx = _paypal_tx(db, order_id, lock=True)
+    if tx and tx.status == "pending":
+        tx.status = "failed"  # a later capture (if any) still credits via _settle_paypal
+        db.commit()
+    return {"ok": True}
+
+
+@router.post("/paypal/webhook")
+async def paypal_webhook(request: Request, db: Session = Depends(get_db)):
+    raw = await request.body()
+    try:
+        event = json.loads(raw)
+    except ValueError:
+        raise HTTPException(400, "Invalid payload")
+    try:
+        if not await run_in_threadpool(paypal.verify_webhook, request.headers, event):
+            raise HTTPException(400, "Invalid webhook signature")
+    except paypal.PaypalError:
+        logger.exception("PayPal webhook verification call failed")
+        raise HTTPException(502, "Couldn't verify webhook")
+
+    etype = event.get("event_type")
+    resource = event.get("resource") or {}
+    if etype == "CHECKOUT.ORDER.APPROVED":
+        order_id = resource.get("id")
+    elif etype == "PAYMENT.CAPTURE.COMPLETED":
+        order_id = ((resource.get("supplementary_data") or {}).get("related_ids") or {}).get("order_id")
+    else:
+        return {"received": True}
+
+    # Only act on orders we created — never capture someone else's order.
+    if not order_id or not _paypal_tx(db, order_id):
+        return {"received": True}
+    try:
+        fetch = paypal.capture_order if etype == "CHECKOUT.ORDER.APPROVED" else paypal.get_order
+        order = await run_in_threadpool(fetch, order_id)
+    except paypal.PaypalError:
+        logger.exception("PayPal webhook handling failed for order %s", order_id)
+        raise HTTPException(502, "Couldn't process webhook")  # PayPal retries
+    _settle_paypal(db, order_id, order)
     return {"received": True}
 
 
