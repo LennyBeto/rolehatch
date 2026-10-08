@@ -28,7 +28,9 @@ steps:
         pip install --quiet alembic sqlalchemy psycopg2-binary python-dotenv pgvector
         DATABASE_URL=$$(gcloud secrets versions access latest --secret=database-url) alembic -c alembic.ini upgrade head
 
-  # 4. Deploy to Cloud Run, secrets pulled fresh from Secret Manager each deploy
+  # 4. Deploy to Cloud Run, secrets pulled fresh from Secret Manager each deploy.
+  #    --update-* (not --set-*) so secrets/env vars configured outside this file
+  #    (e.g. M-Pesa) are preserved instead of being wiped on every deploy.
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
     args:
@@ -40,13 +42,13 @@ steps:
       - "--allow-unauthenticated"
       - "--min-instances=0"
       - "--max-instances=10"
-      - "--timeout=900"
+      - "--timeout=1800"
       # Previous Perchie provider (Anthropic) — kept for future use. To switch back, uncomment this
       # line and comment out the Gemini line below (the anthropic-api-key secret must exist in main.tf):
-      # - "--set-secrets=DATABASE_URL=database-url:latest,SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,UPSTASH_REDIS_TOKEN=upstash-token:latest,SCHEDULER_SECRET=scheduler-secret:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest"
+      # - "--update-secrets=DATABASE_URL=database-url:latest,SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,UPSTASH_REDIS_TOKEN=upstash-token:latest,SCHEDULER_SECRET=scheduler-secret:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest,PAYSTACK_SECRET_KEY=paystack-secret-key:latest,PAYPAL_CLIENT_ID=paypal-client-id:latest,PAYPAL_CLIENT_SECRET=paypal-client-secret:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest"
       # Active Perchie provider: Google AI Studio (Gemini)
-      - "--set-secrets=DATABASE_URL=database-url:latest,SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,UPSTASH_REDIS_TOKEN=upstash-token:latest,SCHEDULER_SECRET=scheduler-secret:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest,GEMINI_API_KEY=gemini-api-key:latest"
-      - "--set-env-vars=ALLOWED_ORIGINS=https://rolehatch.com,UPSTASH_REDIS_URL=${_UPSTASH_URL},FRONTEND_URL=https://rolehatch.com,SUPABASE_URL=${_SUPABASE_URL}"
+      - "--update-secrets=DATABASE_URL=database-url:latest,SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,UPSTASH_REDIS_TOKEN=upstash-token:latest,SCHEDULER_SECRET=scheduler-secret:latest,STRIPE_SECRET_KEY=stripe-secret-key:latest,STRIPE_WEBHOOK_SECRET=stripe-webhook-secret:latest,PAYSTACK_SECRET_KEY=paystack-secret-key:latest,PAYPAL_CLIENT_ID=paypal-client-id:latest,PAYPAL_CLIENT_SECRET=paypal-client-secret:latest,GEMINI_API_KEY=gemini-api-key:latest"
+      - "--update-env-vars=ALLOWED_ORIGINS=https://rolehatch.com,UPSTASH_REDIS_URL=${_UPSTASH_URL},FRONTEND_URL=https://rolehatch.com,SUPABASE_URL=${_SUPABASE_URL},PAYPAL_ENV=${_PAYPAL_ENV},PAYPAL_WEBHOOK_ID=${_PAYPAL_WEBHOOK_ID},PAYPAL_KES_PER_USD=${_PAYPAL_KES_PER_USD}"
 
 images:
   - "us-central1-docker.pkg.dev/$PROJECT_ID/rolehatch/api:$SHORT_SHA"
@@ -55,6 +57,9 @@ images:
 substitutions:
   _UPSTASH_URL: "https://your-instance.upstash.io"
   _SUPABASE_URL: "https://your-project-ref.supabase.co"
+  _PAYPAL_ENV: "sandbox"            # switch to "live" at go-live
+  _PAYPAL_WEBHOOK_ID: "your-paypal-webhook-id"
+  _PAYPAL_KES_PER_USD: "129"        # update when the KES/USD rate moves
 
 options:
   logging: CLOUD_LOGGING_ONLY
