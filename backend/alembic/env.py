@@ -14,6 +14,7 @@ from app.models.job_alert import JobAlert
 from app.models.contact_message import ContactMessage
 from app.models.applicant_profile import ApplicantProfile
 from app.models.wallet import Wallet, WalletTransaction
+from app.models.cv_build import CvBuildCredit, CvBuild, CvCreditPurchase  # noqa
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
