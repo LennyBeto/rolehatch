@@ -113,6 +113,56 @@ class Settings(BaseSettings):
         alias="MPESA_CALLBACK_SECRET",
     )
 
+    # ── Paystack + CV template build packs ───────────────────
+    # The same secret key also powers wallet card/bank deposits (KES) in api/routes/wallet.py,
+    # so the Paystack account needs KES enabled alongside CV_PACK_CURRENCY.
+    paystack_secret_key: str = Field(
+        default="",
+        description="Paystack secret key — used for checkout initialization and webhook "
+        "signature (HMAC-SHA512) verification; empty disables CV pack purchases",
+        alias="PAYSTACK_SECRET_KEY",
+    )
+    cv_pack_price_minor: int = Field(
+        default=399,
+        description="CV build pack price in minor units (399 = $3.99 / 3 builds)",
+        alias="CV_PACK_PRICE_MINOR",
+    )
+    cv_pack_currency: str = Field(
+        default="USD",
+        description="CV build pack currency (must be enabled on the Paystack account)",
+        alias="CV_PACK_CURRENCY",
+    )
+
+    # ── PayPal (wallet deposits, charged in USD) ─────────────
+    # PayPal doesn't support KES, so wallet deposits are converted KES -> USD at
+    # PAYPAL_KES_PER_USD and the wallet is credited the original KES amount.
+    paypal_client_id: str = Field(default="", description="PayPal REST app client ID", alias="PAYPAL_CLIENT_ID")
+    paypal_client_secret: str = Field(default="", description="PayPal REST app client secret", alias="PAYPAL_CLIENT_SECRET")
+    paypal_webhook_id: str = Field(
+        default="",
+        description="PayPal webhook ID — required to verify webhook signatures",
+        alias="PAYPAL_WEBHOOK_ID",
+    )
+    paypal_env: str = Field(default="sandbox", description="sandbox or live (production is accepted as live)", alias="PAYPAL_ENV")
+    paypal_kes_per_usd: float = Field(
+        default=129.0,
+        gt=0,
+        description="KES per 1 USD used to price PayPal wallet deposits — update when the rate moves",
+        alias="PAYPAL_KES_PER_USD",
+    )
+
+    @field_validator("paypal_env", mode="before")
+    @classmethod
+    def normalize_paypal_env(cls, v):
+        # Same vocabulary as MPESA_ENV: accept "production" as an alias for PayPal's "live",
+        # and reject typos so a bad value can't silently fall back to the sandbox.
+        env = str(v or "sandbox").strip().lower()
+        if env == "production":
+            env = "live"
+        if env not in ("sandbox", "live"):
+            raise ValueError("PAYPAL_ENV must be 'sandbox' or 'live'")
+        return env
+
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def split_allowed_origins(cls, v):
