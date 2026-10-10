@@ -59,8 +59,14 @@ export type EmployerJobUpdate = {
 export const updateEmployerJob = (jobId: string, body: EmployerJobUpdate) =>
   authedFetch(`/api/employer/jobs/${jobId}`, { method: "PATCH", body: JSON.stringify(body) });
 
+// DELETE returns 204 No Content — don't call res.json() on the response
 export const deleteEmployerJob = (jobId: string) =>
   authedFetch(`/api/employer/jobs/${jobId}`, { method: "DELETE" });
+
+// Aliases used by EditJobDialog / DeleteJobDialog
+export type JobUpdatePayload = EmployerJobUpdate;
+export const updateJob = updateEmployerJob;
+export const deleteJob = deleteEmployerJob;
 
 export type ApplicantProfile = {
   full_name: string | null;
@@ -107,7 +113,7 @@ export const resetApplicantProfile = () =>
 
 export const getApplicantSummary = () => authedFetch("/api/applicant/profile/summary");
 
-// NEW: returns just the summary text for the My Profile card.
+// Returns just the summary text for the My Profile card.
 // Resolves to null on any failure so a failed fetch never wipes a summary already on screen.
 export const getApplicantSummaryText = async (): Promise<string | null> => {
   try {
