@@ -36,9 +36,9 @@ export default function WalletPage() {
   const [phone, setPhone] = useState("");
   const [mpesaAmt, setMpesaAmt] = useState("");
   const [paystackAmt, setPaystackAmt] = useState("");
-  const [paypalAmt, setPaypalAmt] = useState("");
+  const [bachsAmt, setBachsAmt] = useState("");
   const [withdrawAmt, setWithdrawAmt] = useState("");
-  const [rate, setRate] = useState<number | null>(null);
+  const [bachsRate, setBachsRate] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const verifiedRef = useRef(false);
 
@@ -67,23 +67,23 @@ export default function WalletPage() {
     if (user) load();
   }, [user, load]);
 
-  // KES→USD rate, only used to preview the PayPal charge.
+  // KES→USD rate, only used to preview the Bachs charge.
   useEffect(() => {
     if (!user) return;
-    authedFetch("/api/wallet/paypal/rate")
+    authedFetch("/api/wallet/bachs/rate")
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => data && setRate(Number(data.kes_per_usd)))
+      .then((data) => data && setBachsRate(Number(data.kes_per_usd)))
       .catch(() => {});
   }, [user]);
 
-  // Handles the redirect back from Paystack (?reference=) or PayPal (?paypal=return|cancel&token=).
+  // Handles the redirect back from Paystack (?reference=) or Bachs (?checkout_id= / #bachs-cancelled).
   useEffect(() => {
     if (!user || verifiedRef.current) return;
     const params = new URLSearchParams(window.location.search);
     const paystackRef = params.get("reference");
-    const paypalState = params.get("paypal");
-    const paypalOrder = params.get("token") ?? "";
-    if (!paystackRef && !(paypalState && paypalOrder)) return;
+    const bachsCheckout = params.get("checkout_id");
+    const bachsCancelled = window.location.hash === "#bachs-cancelled";
+    if (!paystackRef && !bachsCheckout && !bachsCancelled) return;
     verifiedRef.current = true;
 
     const announce = (status: string, provider: string) => {
@@ -102,13 +102,17 @@ export default function WalletPage() {
           const res = await authedFetch(`/api/wallet/paystack/verify/${encodeURIComponent(paystackRef)}`);
           if (!res.ok) throw new Error(`Verification failed (${res.status})`);
           announce((await res.json()).status, "Paystack");
-        } else if (paypalState === "cancel") {
-          await authedFetch(`/api/wallet/paypal/cancel/${encodeURIComponent(paypalOrder)}`, { method: "POST" });
+        } else if (bachsCheckout) {
+          // Bachs confirms via webhook only (a redirect alone isn't proof of payment);
+          // the pending-transaction poll below picks up the credit when it lands.
+          toaster.create({
+            title: "Confirming your payment",
+            description: "Bachs is confirming it — your balance will update in a moment.",
+            type: "info",
+          });
+        } else if (bachsCancelled) {
+          await authedFetch("/api/wallet/bachs/cancel", { method: "POST" });
           toaster.create({ title: "Payment cancelled", description: "You weren't charged.", type: "info" });
-        } else {
-          const res = await authedFetch(`/api/wallet/paypal/capture/${encodeURIComponent(paypalOrder)}`, { method: "POST" });
-          if (!res.ok) throw new Error(`Payment couldn't be completed (${res.status})`);
-          announce((await res.json()).status, "PayPal");
         }
       } catch (err) {
         toaster.create({ title: "Couldn't verify payment", description: errMessage(err), type: "error" });
@@ -198,25 +202,25 @@ export default function WalletPage() {
     });
   };
 
-  const depositPaypal = () => {
-    if (!validAmount(paypalAmt)) {
+  const depositBachs = () => {
+    if (!validAmount(bachsAmt)) {
       notifyInvalidAmount();
       return;
     }
-    return run("paypal-deposit", "Couldn't start PayPal checkout", async () => {
-      const res = await authedFetch("/api/wallet/paypal/initialize", {
-        method: "POST", body: JSON.stringify({ amount: Math.round(Number(paypalAmt)) }),
+    return run("bachs-deposit", "Couldn't start Bachs checkout", async () => {
+      const res = await authedFetch("/api/wallet/bachs/initialize", {
+        method: "POST", body: JSON.stringify({ amount: Math.round(Number(bachsAmt)) }),
       });
       if (!res.ok) {
         toaster.create({
-          title: "Couldn't start PayPal checkout",
+          title: "Couldn't start Bachs checkout",
           description: await errorDetail(res, "Please try again."),
           type: "error",
         });
         return;
       }
-      const { approval_url } = await res.json();
-      window.location.href = approval_url;
+      const { checkout_url } = await res.json();
+      window.location.href = checkout_url;
     });
   };
 
@@ -245,23 +249,23 @@ export default function WalletPage() {
 
   if (loading || !user) return null;
 
-  const usdPreview =
-    rate && validAmount(paypalAmt) ? (Math.ceil((Number(paypalAmt) / rate) * 100) / 100).toFixed(2) : null;
+  const bachsUsdPreview =
+    bachsRate && validAmount(bachsAmt) ? (Math.ceil((Number(bachsAmt) / bachsRate) * 100) / 100).toFixed(2) : null;
 
   return (
-    <Box maxW="1100px" mx="auto" mt={12} px={4}>
+    <Box maxW="1200px" mx="auto" mt={12} px={4}>
       <Heading size="lg" mb={1}>Wallet</Heading>
-      <Text color="gray.600" mb={6}>Add funds with M-Pesa, card/bank, or PayPal. Withdraw to M-Pesa.</Text>
+      <Text color="gray.600" mb={6}>Add funds with M-Pesa, card/bank, or Bachs. Withdraw to M-Pesa.</Text>
 
       <Box p={5} bg="surface" border="1px solid #E5E3DD" borderRadius="lg" mb={6}>
         <Text fontSize="sm" color="gray.600">Available balance</Text>
         <Heading size="2xl" color="brand.500">{wallet ? fmt(wallet.balance, wallet.currency) : "—"}</Heading>
       </Box>
 
-      <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={6} mb={8} alignItems="start">
+      <SimpleGrid columns={{ base: 1, md: 3 }} gap={6} mb={8} alignItems="stretch">
         {/* ── M-Pesa card ── */}
-        <Box p={5} bg="surface" border="1px solid #E5E3DD" borderRadius="lg">
-          <Flex justify="space-between" align="center" mb={1}>
+        <Box p={5} bg="surface" border="1px solid #E5E3DD" borderRadius="lg" h="100%">
+          <Flex justify="space-between" align="center" mb={1} gap={2}>
             <Heading size="md">M-Pesa</Heading>
             <Badge colorPalette="green" variant="subtle">Deposit &amp; Withdraw</Badge>
           </Flex>
@@ -272,10 +276,10 @@ export default function WalletPage() {
             <Input type="tel" placeholder="M-Pesa number, e.g. 0712345678" value={phone}
               onChange={(e) => setPhone(e.target.value)} />
             <HStack>
-              <Input type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1} placeholder="Amount (KES)"
-                value={mpesaAmt} onChange={(e) => setMpesaAmt(e.target.value)} />
+              <Input flex="1" minW={0} type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1}
+                placeholder="Amount (KES)" value={mpesaAmt} onChange={(e) => setMpesaAmt(e.target.value)} />
               <Button colorPalette="brand" onClick={depositMpesa} loading={busy === "mpesa-deposit"}
-                disabled={!mpesaAmt || !phone}>
+                disabled={!mpesaAmt || !phone} flexShrink={0}>
                 Deposit
               </Button>
             </HStack>
@@ -287,10 +291,10 @@ export default function WalletPage() {
               <>
                 <Text fontSize="sm" color="gray.600" mb={3}>Sent to {wallet.phone_masked}</Text>
                 <HStack>
-                  <Input type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1} placeholder="Amount (KES)"
-                    value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} />
+                  <Input flex="1" minW={0} type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1}
+                    placeholder="Amount (KES)" value={withdrawAmt} onChange={(e) => setWithdrawAmt(e.target.value)} />
                   <Button colorPalette="brand" onClick={withdraw} loading={busy === "withdraw"}
-                    disabled={!withdrawAmt}>
+                    disabled={!withdrawAmt} flexShrink={0}>
                     Withdraw
                   </Button>
                 </HStack>
@@ -304,8 +308,8 @@ export default function WalletPage() {
         </Box>
 
         {/* ── Paystack card ── */}
-        <Box p={5} bg="surface" border="1px solid #E5E3DD" borderRadius="lg">
-          <Flex justify="space-between" align="center" mb={1}>
+        <Box p={5} bg="surface" border="1px solid #E5E3DD" borderRadius="lg" h="100%">
+          <Flex justify="space-between" align="center" mb={1} gap={2}>
             <Heading size="md">Paystack</Heading>
             <Badge colorPalette="blue" variant="subtle">Deposit only</Badge>
           </Flex>
@@ -314,10 +318,10 @@ export default function WalletPage() {
           <Heading size="xs" textTransform="uppercase" color="gray.500" mb={2}>Deposit</Heading>
           <Stack gap={3}>
             <HStack>
-              <Input type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1} placeholder="Amount (USD)"
-                value={paystackAmt} onChange={(e) => setPaystackAmt(e.target.value)} />
+              <Input flex="1" minW={0} type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1}
+                placeholder="Amount (KES)" value={paystackAmt} onChange={(e) => setPaystackAmt(e.target.value)} />
               <Button colorPalette="brand" onClick={depositPaystack} loading={busy === "paystack-deposit"}
-                disabled={!paystackAmt}>
+                disabled={!paystackAmt} flexShrink={0}>
                 Pay
               </Button>
             </HStack>
@@ -327,28 +331,30 @@ export default function WalletPage() {
           </Stack>
         </Box>
 
-        {/* ── PayPal card ── */}
-        <Box p={5} bg="surface" border="1px solid #E5E3DD" borderRadius="lg">
-          <Flex justify="space-between" align="center" mb={1}>
-            <Heading size="md">PayPal</Heading>
-            <Badge colorPalette="purple" variant="subtle">Deposit only</Badge>
+        {/* ── Bachs card ── */}
+        <Box p={5} bg="surface" border="1px solid #E5E3DD" borderRadius="lg" h="100%">
+          <Flex justify="space-between" align="center" mb={1} gap={2}>
+            <Heading size="md">Bachs</Heading>
+            <Badge colorPalette="orange" variant="subtle">Deposit only</Badge>
           </Flex>
-          <Text fontSize="sm" color="gray.600" mb={4}>Pay with your PayPal balance or linked card. Charged in USD.</Text>
+          <Text fontSize="sm" color="gray.600" mb={4}>
+            Pay by card, bank transfer, mobile money or crypto on Bachs's hosted checkout. Priced in USD.
+          </Text>
 
           <Heading size="xs" textTransform="uppercase" color="gray.500" mb={2}>Deposit</Heading>
           <Stack gap={3}>
             <HStack>
-              <Input type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1} placeholder="Amount (USD)"
-                value={paypalAmt} onChange={(e) => setPaypalAmt(e.target.value)} />
-              <Button colorPalette="brand" onClick={depositPaypal} loading={busy === "paypal-deposit"}
-                disabled={!paypalAmt}>
+              <Input flex="1" minW={0} type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1}
+                placeholder="Amount (KES)" value={bachsAmt} onChange={(e) => setBachsAmt(e.target.value)} />
+              <Button colorPalette="brand" onClick={depositBachs} loading={busy === "bachs-deposit"}
+                disabled={!bachsAmt} flexShrink={0}>
                 Pay
               </Button>
             </HStack>
             <Text fontSize="xs" color="gray.500">
-              {usdPreview
-                ? `You'll pay $${usdPreview} USD (1 USD ≈ KES ${rate}). Your wallet is credited ${fmt(Number(paypalAmt))}.`
-                : "Amounts are converted to USD at checkout. You'll be redirected to PayPal, then brought back here."}
+              {bachsUsdPreview
+                ? `Priced at $${bachsUsdPreview} USD (1 USD ≈ KES ${bachsRate}); you can pay in your local currency at checkout. Your wallet is credited ${fmt(Number(bachsAmt))}.`
+                : "Amounts are priced in USD. You'll be redirected to Bachs to pay, then brought back here."}
             </Text>
           </Stack>
         </Box>
