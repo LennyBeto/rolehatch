@@ -1,4 +1,4 @@
-# backend/app/api/routes/wallet.py  (M-Pesa + Paystack + PayPal)
+# backend/app/api/routes/wallet.py  (M-Pesa + Paystack + PayPal + Bachs)
 import hmac
 import json
 import logging
@@ -18,8 +18,8 @@ from app.core.config import settings
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.wallet import Wallet, WalletTransaction
-from app.schemas.wallet import DepositIn, PaypalDepositIn, PaystackDepositIn, WithdrawIn
-from app.services import mpesa, paypal, paystack
+from app.schemas.wallet import DepositIn, BachsDepositIn, PaypalDepositIn, PaystackDepositIn, WithdrawIn
+from app.services import mpesa, bachs, paypal, paystack, ats_quota
 
 logger = logging.getLogger("perchrole.wallet")
 router = APIRouter()
@@ -28,6 +28,7 @@ limiter = Limiter(key_func=get_remote_address)
 ACK = {"ResultCode": 0, "ResultDesc": "Accepted"}
 
 PAYPAL_PREFIX = "PP-"
+BACHS_PREFIX = "BCH-"
 
 
 # ── helpers ──────────────────────────────────────────────
@@ -167,6 +168,43 @@ def _settle_paypal(db: Session, order_id: str, order: dict) -> str:
     return "pending"
 
 
+def _settle_bachs(db: Session, checkout_id: str, event_type: str, data: dict) -> str:
+    """Idempotent: Bachs delivers at-least-once, and a customer may retry after a failed
+    attempt on the same checkout — so the row lock + status check guarantee a checkout
+    credits the wallet at most once, and a later success still credits a 'failed' row."""
+    tx = db.execute(
+        select(WalletTransaction)
+        .where(
+            WalletTransaction.checkout_request_id == f"{BACHS_PREFIX}{checkout_id}",
+            WalletTransaction.type == "deposit",
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+    if not tx:
+        logger.warning("Bachs checkout %s has no matching transaction", checkout_id)
+        return "unknown"
+    if tx.status == "completed":
+        return "completed"
+
+    if event_type == "collection.succeeded" and str(data.get("status") or "SUCCEEDED").upper() == "SUCCEEDED":
+        wallet = db.execute(select(Wallet).where(Wallet.id == tx.wallet_id).with_for_update()).scalar_one()
+        wallet.balance += tx.amount
+        tx.status = "completed"
+        tx.mpesa_receipt = data.get("charge_id")  # Bachs charge ID shows as the receipt
+        db.commit()
+        return "completed"
+
+    if event_type in ("collection.failed", "checkout.expired"):
+        if tx.status == "pending":
+            tx.status = "failed"
+            db.commit()
+        return "failed"
+
+    if event_type == "collection.underpaid":
+        logger.error("Bachs underpayment on tx %s: %s", tx.id, data)  # never credited; manual review
+    return "pending"
+
+
 # ── user endpoints ───────────────────────────────────────
 @router.get("")
 def get_wallet(user=Depends(get_current_user), db: Session = Depends(get_db)):
@@ -258,7 +296,7 @@ def create_withdrawal(
     return {"ok": True, "message": "Withdrawal is being processed"}
 
 
-# ── Paystack (card / bank deposits) ──────────────────────
+# ── Paystack (card / bank deposits + ATS scan packs) ─────
 @router.post("/paystack/initialize")
 @limiter.limit("5/minute")
 def paystack_initialize(
@@ -331,9 +369,11 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db)):
         return {"received": True}
     if event.get("event") == "charge.success":
         data = event.get("data") or {}
-        reference = data.get("reference")
-        if reference and str(reference).startswith("PSK"):
-            _settle_paystack(db, reference, data)
+        reference = str(data.get("reference") or "")
+        if reference.startswith("PSK"):
+            _settle_paystack(db, reference, data)  # wallet deposit
+        elif reference.startswith(ats_quota.REFERENCE_PREFIX):
+            ats_quota.settle_pack(db, reference, data)  # ATS scan pack purchase
     return {"received": True}
 
 
@@ -438,6 +478,93 @@ async def paypal_webhook(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(502, "Couldn't process webhook")  # PayPal retries
     _settle_paypal(db, order_id, order)
     return {"received": True}
+
+
+# ── Bachs (USD-priced hosted checkout) ───────────────────
+@router.get("/bachs/rate")
+def bachs_rate(user=Depends(get_current_user)):
+    return {"kes_per_usd": settings.bachs_kes_per_usd}
+
+
+@router.post("/bachs/initialize")
+@limiter.limit("5/minute")
+def bachs_initialize(
+    request: Request,
+    payload: BachsDepositIn,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not settings.bachs_api_key:
+        raise HTTPException(503, "Bachs is not configured")
+    try:
+        usd_amount = bachs.kes_to_usd_amount(payload.amount)
+    except bachs.BachsError as e:
+        raise HTTPException(503, str(e))
+
+    wallet = _get_or_create_wallet(db, UUID(user["sub"]))
+    tx = WalletTransaction(wallet_id=wallet.id, type="deposit", amount=payload.amount, status="pending")
+    db.add(tx)
+    db.commit()
+    db.refresh(tx)
+
+    try:
+        session = bachs.create_checkout_session(
+            usd_amount=usd_amount,
+            reference=f"WLT-{tx.id}",
+            email=user.get("email"),
+            # Bachs appends ?checkout_id=... to success_url; cancel uses a fragment so the
+            # wallet page can tell the two apart.
+            success_url=f"{settings.frontend_url}/wallet",
+            cancel_url=f"{settings.frontend_url}/wallet#bachs-cancelled",
+            metadata={"tx_id": str(tx.id), "user_id": user["sub"]},
+        )
+    except bachs.BachsError:
+        logger.exception("Bachs create checkout failed for tx %s", tx.id)
+        tx.status = "failed"
+        db.commit()
+        raise HTTPException(502, "Couldn't start Bachs checkout — please try again")
+
+    tx.checkout_request_id = f"{BACHS_PREFIX}{session['checkout_id']}"
+    db.commit()
+    return {"checkout_url": session["checkout_url"], "usd_amount": usd_amount}
+
+
+@router.post("/bachs/cancel")
+def bachs_cancel(user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Customer backed out of the hosted page: stop showing their open Bachs attempts as pending.
+    A payment that still completes later is credited by the webhook regardless."""
+    wallet = _get_or_create_wallet(db, UUID(user["sub"]))
+    pending = db.execute(
+        select(WalletTransaction)
+        .where(
+            WalletTransaction.wallet_id == wallet.id,
+            WalletTransaction.type == "deposit",
+            WalletTransaction.status == "pending",
+            WalletTransaction.checkout_request_id.startswith(BACHS_PREFIX),
+        )
+        .with_for_update()
+    ).scalars().all()
+    for tx in pending:
+        tx.status = "failed"
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/bachs/webhook")
+async def bachs_webhook(request: Request, db: Session = Depends(get_db)):
+    raw = await request.body()
+    if not bachs.verify_signature(raw, request.headers):
+        raise HTTPException(400, "Invalid webhook signature")
+    try:
+        event = json.loads(raw)
+    except ValueError:
+        return {"received": True}
+
+    data = event.get("data") or {}
+    checkout_id = data.get("checkout_id")
+    if checkout_id:
+        _settle_bachs(db, str(checkout_id), event.get("type") or "", data)
+    return {"received": True}  # always 200 for valid signatures so Bachs doesn't retry unknown events
 
 
 # ── Daraja callbacks ─────────────────────────────────────
