@@ -1,7 +1,7 @@
 // frontend/lib/pricing.ts
 // Single source of truth for featured-listing pricing across the app.
-// When Paystack lands, add its price/label here rather than hardcoding
-// it in a new component — every consumer below stays untouched.
+// To add another payment provider, add its price/label here rather than
+// hardcoding it in a new component — every consumer below stays untouched.
 
 export const FEATURE_DAYS = 14;
 
@@ -17,8 +17,8 @@ export const FEATURE_PRICING = {
     amount: 49,
     currency: "USD",
     display: "$49",
-    label: "Card (via Paystack)",
-    live: false, // flip to true once Paystack is wired in
+    label: "Paystack",
+    live: true,
   },
 } as const;
 
