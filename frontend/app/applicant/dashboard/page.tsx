@@ -1,7 +1,7 @@
 // frontend/app/applicant/dashboard/page.tsx
 "use client";
 import { Box, Heading, Text, Stack, Badge, Button, HStack, Center, Spinner } from "@chakra-ui/react";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef } from "react"; // CHANGED (ATS paywall): + Suspense
 import { useAuth } from "@/lib/AuthContext";
 import { useRouter } from "next/navigation";
 import {
@@ -16,6 +16,7 @@ import ApplicantSummaryCard from "@/components/ApplicantSummaryCard";
 import ProfileManagementCard from "@/components/ProfileManagementCard";
 import CVBuilderCard from "@/components/CVBuilderCard";
 import CoverLetterBuilderCard from "@/components/CoverLetterBuilderCard";
+import ATSScanCard from "@/components/ATSScanCard"; // NEW (ATS paywall)
 
 type SavedJobEntry = {
   id: string;
@@ -203,6 +204,14 @@ export default function ApplicantDashboard() {
             onCvUploaded={setCvFilename}
             onMatchScoreUpdated={setHasMatchScore}
           />
+
+          {/* NEW (ATS paywall): 1 free lifetime scan, then $3.99 for 3 more. Suspense is required because
+              the card reads ?reference= (Paystack return) via useSearchParams */}
+          <Box mb={6}>
+            <Suspense fallback={null}>
+              <ATSScanCard />
+            </Suspense>
+          </Box>
 
           {/* ATS-friendly CV templates (PDF / Google Doc → template) */}
           <Box mb={6}>
