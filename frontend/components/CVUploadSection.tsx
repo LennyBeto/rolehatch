@@ -2,7 +2,7 @@
 "use client";
 import { Box, Heading, Text, Button, Stack, Progress, HStack, Badge, Textarea } from "@chakra-ui/react";
 import { useRef, useState } from "react";
-import { uploadApplicantCV, scanApplicantCV } from "@/lib/api";
+import { uploadApplicantCV, scanApplicantCV, notifyAtsQuotaChanged } from "@/lib/api";
 import { toaster } from "@/components/ui/toaster";
 
 type ScanResult = {
@@ -85,12 +85,25 @@ export default function CVUploadSection({
     setScanning(true);
     try {
       const res = await scanApplicantCV();
+
+      // ATS paywall: free scan used and no purchased scans left
+      if (res.status === 402) {
+        notifyAtsQuotaChanged(); // ATSScanCard refreshes and shows the buy button
+        toaster.create({
+          title: "ATS scans locked",
+          description: "You've used your free scan. Buy 3 more for $3.99 in the ATS Scan card.",
+          type: "info",
+        });
+        return;
+      }
+
       if (!res.ok) {
         const err = await res.json().catch(() => null);
-        throw new Error(err?.detail || "Scan failed");
+        throw new Error(typeof err?.detail === "string" ? err.detail : "Scan failed");
       }
       const data: ScanResult = await res.json();
       setResult(data);
+      notifyAtsQuotaChanged(); // a scan was spent: refresh the remaining-scans badge
       // A successful scan is also when the backend generates the resume
       // embedding used for job match-score sorting — see scan_cv.
       onMatchScoreUpdated(true);

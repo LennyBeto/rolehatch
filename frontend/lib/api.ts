@@ -143,8 +143,46 @@ export const uploadApplicantCV = (file: File) => {
 export const deleteApplicantCV = () =>
   authedFetch("/api/applicant/profile/cv", { method: "DELETE" });
 
+// Gated by the ATS paywall: 402 = locked (free scan used, no paid credits left).
 export const scanApplicantCV = () =>
   authedFetch("/api/applicant/profile/cv/scan", { method: "POST" });
+
+// ── ATS scan paywall (1 free lifetime scan, then 3 more per $3.99 pack) ──
+export type AtsQuota = {
+  free_remaining: number;
+  paid_remaining: number;
+  remaining: number;
+  locked: boolean;
+  pack_price_usd: number;
+  pack_price_kes: number;
+  pack_scans: number;
+};
+
+export type AtsScanResult = {
+  overall_score: number;
+  breakdown: Record<string, number>; // contact_info, key_sections, length, keyword_match, action_verbs
+  suggestions: string[];
+};
+
+export const getAtsQuota = () => authedFetch("/api/ats/quota");
+
+// Paste-text scan. Shares the same quota as scanApplicantCV.
+// 402 = locked; the body's detail.code is "ats_locked"
+export const runAtsScan = (cvText: string) =>
+  authedFetch("/api/ats/scan", { method: "POST", body: JSON.stringify({ cv_text: cvText }) });
+
+// Returns { authorization_url, reference }; redirect the browser to authorization_url
+export const startAtsCheckout = () => authedFetch("/api/ats/checkout", { method: "POST" });
+
+// Call with the `reference` Paystack appends on return (starts with "ATS")
+export const verifyAtsPayment = (reference: string) =>
+  authedFetch(`/api/ats/verify/${reference}`);
+
+// Lets any component that spends or unlocks scans tell ATSScanCard to refresh its badge
+export const ATS_QUOTA_CHANGED_EVENT = "ats-quota-changed";
+export const notifyAtsQuotaChanged = () => {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(ATS_QUOTA_CHANGED_EVENT));
+};
 
 export const uploadApplicantAvatar = (file: File) => {
   const form = new FormData();
