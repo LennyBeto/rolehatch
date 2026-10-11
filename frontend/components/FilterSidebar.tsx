@@ -34,13 +34,16 @@ export default function FilterSidebar() {
   const searchParams = useSearchParams();
 
   const selectedRemoteTypes = searchParams.get("remote_type")?.split(",").map((v) => v.trim().toLowerCase()).filter(Boolean) ?? [];
-  const selectedLanguages = searchParams.get("language")?.split(",").map((v) => v.trim().toLowerCase()).filter(Boolean) ?? [];
+  // "languages" is canonical; "language" is read only so older bookmarked URLs still hydrate the checkboxes
+  const selectedLanguages = (searchParams.get("languages") ?? searchParams.get("language"))
+    ?.split(",").map((v) => v.trim().toLowerCase()).filter(Boolean) ?? [];
   const salaryMin = Number(searchParams.get("salary_min") ?? 0);
   const salaryMax = Number(searchParams.get("salary_max") ?? 200);
 
   const updateParams = (updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("page"); // any filter change invalidates the current page position
+    if ("languages" in updates) params.delete("language"); // drop legacy param so it can't keep filtering
     for (const [key, value] of Object.entries(updates)) {
       if (value === null || value === "") params.delete(key);
       else params.set(key, value);
@@ -56,7 +59,7 @@ export default function FilterSidebar() {
 
   const handleLanguageChange = (values: string[]) => {
     const normalized = values.map((value) => value.trim().toLowerCase()).filter(Boolean);
-    updateParams({ language: normalized.length ? normalized.join(",") : null });
+    updateParams({ languages: normalized.length ? normalized.join(",") : null });
   };
 
   const debouncedSalaryUpdate = useDebouncedCallback((value: number[]) => {
