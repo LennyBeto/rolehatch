@@ -22,8 +22,8 @@ FACETS_CACHE_TTL = 1800
 STATS_CACHE_TTL = 1800
 JOB_DETAIL_CACHE_TTL = 3600
 
-# Bumped from "search" so stale cached results (e.g. empty language searches) are discarded.
-SEARCH_CACHE_PREFIX = "search_v2"
+# Bumped so stale cached results (e.g. empty language searches) are discarded.
+SEARCH_CACHE_PREFIX = "search_v3"
 
 # Maps what the UI may send -> the exact lowercase keywords pipeline.py stores in Job.tech_stack
 LANGUAGE_ALIASES = {
@@ -37,6 +37,9 @@ LANGUAGE_ALIASES = {
     "ts": ["typescript"],
     "dotnet": [".net"],
 }
+
+# Terms too ambiguous to match against free-text titles ("Go-to-Market Manager")
+TITLE_FALLBACK_SKIP = {"go"}
 
 
 def _normalize_languages(raw: str | None) -> list[str]:
@@ -59,7 +62,7 @@ def build_search_query(
     title: str | None,
     salary_min: int | None,
     remote_type: str | None = None,
-    language: str | None = None,
+    languages: str | None = None,
     quick_filter: str | None = None,
     resume_embedding: list[float] | None = None,
 ):
@@ -110,11 +113,18 @@ def build_search_query(
         if types:
             q = q.where(func.lower(Job.remote_type).in_(types))
 
-    langs = _normalize_languages(language)
+    langs = _normalize_languages(languages)
     if langs:
         # Explicit VARCHAR[] cast so `&&` compares varchar[] with varchar[]
         # (a bare Python list can bind as text[] and fail operator resolution).
-        q = q.where(Job.tech_stack.overlap(cast(langs, ARRAY(String))))
+        lang_filters = [Job.tech_stack.overlap(cast(langs, ARRAY(String)))]
+        # Fallback for jobs whose tech_stack is empty: language named as a whole word in the title.
+        for lang in langs:
+            if lang in TITLE_FALLBACK_SKIP:
+                continue
+            pattern = rf"(^|[^a-z0-9+#]){re.escape(lang)}($|[^a-z0-9+#])"
+            lang_filters.append(Job.title.op("~*")(pattern))
+        q = q.where(or_(*lang_filters))
 
     if resume_embedding is not None:
         match_distance = Job.embedding.cosine_distance(resume_embedding)
@@ -169,13 +179,18 @@ def search_jobs(
     title: str | None = None,
     salary_min: int | None = None,
     remote_type: str | None = None,
-    language: str | None = None,
+    languages: str | None = None,   # comma-separated, e.g. "python,go"
+    language: str | None = None,    # legacy alias for `languages`
     quick_filter: str | None = None,
     sort_by_match: bool = False,
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
     user: dict | None = Depends(get_current_user_optional),
 ):
+    # Merge both param names, normalize, and use the normalized form everywhere
+    normalized_langs = _normalize_languages(",".join(p for p in (languages, language) if p))
+    languages_csv = ",".join(normalized_langs) or None
+
     resume_embedding = None
     if sort_by_match and user:
         profile = db.query(ApplicantProfile).filter_by(user_id=user["sub"]).first()
@@ -184,7 +199,7 @@ def search_jobs(
 
     params = {
         "location": location, "title": title, "salary_min": salary_min,
-        "remote_type": remote_type, "language": language,
+        "remote_type": remote_type, "languages": sorted(normalized_langs) or None,
         "quick_filter": quick_filter, "page": page,
     }
     use_cache = resume_embedding is None
@@ -193,7 +208,7 @@ def search_jobs(
         return cached
 
     base_query = build_search_query(
-        db, location, title, salary_min, remote_type, language, quick_filter, resume_embedding
+        db, location, title, salary_min, remote_type, languages_csv, quick_filter, resume_embedding
     )
 
     count_query = select(func.count()).select_from(base_query.order_by(None).subquery())
