@@ -17,6 +17,7 @@ from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.applicant_profile import ApplicantProfile
 from app.schemas.applicant_profile import ApplicantProfileOut, ApplicantProfileUpdate, CVScanResult
+from app.services import ats_quota  # NEW (ATS paywall)
 from app.services.cv_parsing import extract_text_from_upload
 from app.services.cv_summary import MAX_WORDS, MIN_WORDS, build_summary_from_cv, word_count
 from app.services.ats_scoring import compute_ats_score
@@ -339,6 +340,7 @@ def scan_cv(user=Depends(get_current_user), db: Session = Depends(get_db)):
     if not profile.cv_base64:
         raise HTTPException(400, "Upload a CV before running a scan")
 
+    # Validate first: a missing/unreadable CV must never cost the user a credit.
     try:
         upload, raw_bytes = _rebuild_upload(profile)
         cv_text = extract_text_from_upload(upload, raw_bytes)
@@ -346,10 +348,23 @@ def scan_cv(user=Depends(get_current_user), db: Session = Depends(get_db)):
         logger.exception("CV re-parse failed")
         raise HTTPException(400, "Couldn't read your stored CV — please upload it again")
 
-    result = compute_ats_score(cv_text)
-    score = result["overall_score"] if isinstance(result, dict) else result.overall_score
+    # NEW (ATS paywall): same quota as POST /api/ats/scan — 1 free lifetime scan, then
+    # 3 more per $3.99 pack. Spent atomically; refunded below if the scan fails.
+    uid = uuid.UUID(str(user["sub"]))
+    kind = ats_quota.consume_scan(db, uid)
+    if kind is None:
+        raise HTTPException(402, ats_quota.locked_detail())
 
-    profile.last_ats_score = score
-    profile.embedding = _embed_cv_text(cv_text)  # None if unavailable -> match scoring stays off
-    db.commit()
+    try:
+        result = compute_ats_score(cv_text)
+        score = result["overall_score"] if isinstance(result, dict) else result.overall_score
+
+        profile.last_ats_score = score
+        profile.embedding = _embed_cv_text(cv_text)  # None if unavailable -> match scoring stays off
+        db.commit()
+    except Exception:
+        logger.exception("CV scan failed for user %s", uid)
+        db.rollback()
+        ats_quota.refund_scan(db, uid, kind)  # a failed scan never costs a credit
+        raise HTTPException(500, "Scan failed. Your credit was not used.")
     return result
