@@ -113,13 +113,14 @@ class Settings(BaseSettings):
         alias="MPESA_CALLBACK_SECRET",
     )
 
-    # ── Paystack + CV template build packs ───────────────────
+    # ── Paystack + CV template build packs + ATS scan packs ──
     # The same secret key also powers wallet card/bank deposits (KES) in api/routes/wallet.py,
+    # and ATS scan pack purchases (KES, settled through the wallet's shared Paystack webhook),
     # so the Paystack account needs KES enabled alongside CV_PACK_CURRENCY.
     paystack_secret_key: str = Field(
         default="",
         description="Paystack secret key — used for checkout initialization and webhook "
-        "signature (HMAC-SHA512) verification; empty disables CV pack purchases",
+        "signature (HMAC-SHA512) verification; empty disables CV/ATS pack purchases",
         alias="PAYSTACK_SECRET_KEY",
     )
     cv_pack_price_minor: int = Field(
@@ -131,6 +132,12 @@ class Settings(BaseSettings):
         default="USD",
         description="CV build pack currency (must be enabled on the Paystack account)",
         alias="CV_PACK_CURRENCY",
+    )
+    ats_pack_price_kes: int = Field(
+        default=520,
+        gt=0,
+        description="KES price of the 3-scan ATS pack (~$3.99) — update when the exchange rate moves",
+        alias="ATS_PACK_PRICE_KES",
     )
 
     # ── PayPal (wallet deposits, charged in USD) ─────────────
@@ -151,6 +158,23 @@ class Settings(BaseSettings):
         alias="PAYPAL_KES_PER_USD",
     )
 
+    # ── Bachs (wallet deposits, priced in USD) ───────────────
+    # The key prefix selects the environment: sk_sandbox_... -> sandbox-api.bachs.io,
+    # sk_live_... -> api.bachs.io. Wallet deposits are priced in USD at BACHS_KES_PER_USD
+    # and the wallet is credited the original KES amount.
+    bachs_api_key: str = Field(default="", description="Bachs secret API key", alias="BACHS_API_KEY")
+    bachs_webhook_secret: str = Field(
+        default="",
+        description="Bachs webhook endpoint signing secret (Developer Portal -> Webhooks)",
+        alias="BACHS_WEBHOOK_SECRET",
+    )
+    bachs_kes_per_usd: float = Field(
+        default=129.0,
+        gt=0,
+        description="KES per 1 USD used to price Bachs wallet deposits — update when the rate moves",
+        alias="BACHS_KES_PER_USD",
+    )
+
     @field_validator("paypal_env", mode="before")
     @classmethod
     def normalize_paypal_env(cls, v):
@@ -162,6 +186,16 @@ class Settings(BaseSettings):
         if env not in ("sandbox", "live"):
             raise ValueError("PAYPAL_ENV must be 'sandbox' or 'live'")
         return env
+
+    @field_validator("bachs_api_key")
+    @classmethod
+    def check_bachs_key(cls, v):
+        # The prefix picks the Bachs environment, so reject anything else at startup
+        # instead of silently talking to the wrong one.
+        v = (v or "").strip()
+        if v and not v.startswith(("sk_sandbox_", "sk_live_")):
+            raise ValueError("BACHS_API_KEY must start with sk_sandbox_ or sk_live_")
+        return v
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
