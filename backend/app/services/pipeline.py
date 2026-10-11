@@ -5,6 +5,7 @@ import html
 import logging
 import re
 import uuid
+from datetime import datetime, timezone
 
 from dateutil import parser as date_parser
 from fastapi.concurrency import run_in_threadpool
@@ -27,7 +28,7 @@ from app.services.scrapers.recruitee import RecruiteeScraper
 logger = logging.getLogger("perchrole.pipeline")
 
 # Bare "go" is intentionally excluded: it matches "go above and beyond",
-# "go-to-market", etc. Use "golang" (the sidebar's Go filter value).
+# "go-to-market", etc. Use "golang" (jobs.py aliases the sidebar's "go" to it).
 TECH_KEYWORDS = [
     "python", "django", "fastapi", "flask", "javascript", "typescript",
     "react", "next.js", "vue", "node.js", "java", "golang", "rust",
@@ -35,6 +36,13 @@ TECH_KEYWORDS = [
     "aws", "gcp", "azure", "docker", "kubernetes", "terraform", "graphql",
     "rest api", "sql", "swift", "kotlin", "ruby", "rails", "php", "laravel",
 ]
+
+# Compiled once. Lookarounds instead of \b so "c#" and ".net" match correctly,
+# while "java" won't match inside "javascript" and "sql" not inside "postgresql".
+_KW_PATTERNS = {
+    kw: re.compile(rf"(?<!\w){re.escape(kw)}(?!\w)")
+    for kw in TECH_KEYWORDS
+}
 
 SENIOR_KEYWORDS = ["senior", "staff", "principal", "lead", "director", "vp", "head of"]
 ENTRY_KEYWORDS = ["junior", "entry", "associate", "intern", "graduate"]
@@ -63,12 +71,25 @@ SCRAPERS = {
 
 
 def _parse_posted_at(raw_value):
-    if not raw_value:
+    """Accepts ISO strings, date-only strings, and epoch seconds/milliseconds
+    (Lever sends ms). Naive datetimes are treated as UTC; future dates are
+    clamped to now so a listing never shows a date in the future."""
+    if raw_value in (None, ""):
         return None
     try:
-        return date_parser.isoparse(str(raw_value))
-    except (ValueError, TypeError):
+        if isinstance(raw_value, (int, float)) or (isinstance(raw_value, str) and raw_value.isdigit()):
+            n = float(raw_value)
+            if n > 1e11:          # epoch milliseconds
+                n /= 1000
+            dt = datetime.fromtimestamp(n, tz=timezone.utc)
+        else:
+            dt = date_parser.isoparse(str(raw_value))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError, OverflowError, OSError):
         return None
+    now = datetime.now(timezone.utc)
+    return min(dt, now)
 
 
 def _strip_html(raw_html: str | None) -> str | None:
@@ -110,16 +131,14 @@ def _infer_remote_type(location: str | None) -> str | None:
     return None  # unknown — leave null rather than guessing "onsite" incorrectly
 
 
-def _extract_tech_stack(description: str | None) -> list[str]:
-    if not description:
+def _extract_tech_stack(title: str | None, description: str | None) -> list[str]:
+    """Scan title + description. Including the title means a role like
+    'Senior Python Engineer' still matches the language filter when the
+    description is missing or thin."""
+    text = f"{title or ''}\n{description or ''}".lower().strip()
+    if not text:
         return []
-    desc_lower = description.lower()
-    # Lookarounds instead of \b so "c#" and ".net" match correctly, while
-    # "java" still won't match inside "javascript" and "sql" inside "postgresql".
-    return [
-        kw for kw in TECH_KEYWORDS
-        if re.search(rf"(?<!\w){re.escape(kw)}(?!\w)", desc_lower)
-    ]
+    return [kw for kw, pat in _KW_PATTERNS.items() if pat.search(text)]
 
 
 def _external_id(url: str) -> str:
@@ -219,7 +238,7 @@ def persist_company_jobs(db: Session, company: Company, raw_jobs: list[dict]) ->
             "description": description,
             "level": _infer_level(title),
             "remote_type": j.get("remote_type") or _infer_remote_type(location),
-            "tech_stack": _extract_tech_stack(description),
+            "tech_stack": _extract_tech_stack(title, description),
             "embedding": j.get("embedding"),
         }
 
@@ -244,6 +263,8 @@ def persist_company_jobs(db: Session, company: Company, raw_jobs: list[dict]) ->
                     # skipped the detail call or the embedding request failed.
                     "posted_at": func.coalesce(ins.excluded.posted_at, Job.posted_at),
                     "description": func.coalesce(ins.excluded.description, Job.description),
+                    # Only recompute when this run actually carried a description;
+                    # otherwise keep the richer stack from an earlier run.
                     "tech_stack": case(
                         (ins.excluded.description.isnot(None), ins.excluded.tech_stack),
                         else_=Job.tech_stack,
@@ -258,6 +279,14 @@ def persist_company_jobs(db: Session, company: Company, raw_jobs: list[dict]) ->
             Job.source == platform,        # never touch 'direct' employer-posted jobs
             Job.is_active.is_(True),
         )
+
+        # Platforms that expose no date (e.g. BambooHR list): use first-seen time so
+        # no listing shows "Recently posted". The upsert's coalesce() swaps in the
+        # real platform date as soon as a scrape provides one.
+        db.query(Job).filter(*scope, Job.posted_at.is_(None)).update(
+            {"posted_at": func.now()}, synchronize_session=False
+        )
+
         prev_active = db.query(func.count(Job.id)).filter(*scope).scalar() or 0
         deactivated = 0
         if prev_active >= 20 and len(rows) < prev_active * MIN_SCRAPE_RATIO:

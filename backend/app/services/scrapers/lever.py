@@ -10,7 +10,8 @@ def _build_content(j: dict) -> str:
     for section in j.get("lists", []) or []:
         parts.append(f"<h3>{section.get('text', '')}</h3><ul>{section.get('content', '')}</ul>")
     parts.append(j.get("additional") or "")
-    return "".join(parts)
+    content = "".join(parts).strip()
+    return content or (j.get("descriptionPlain") or "")
 
 
 def _created_at_iso(j: dict) -> str | None:
@@ -25,7 +26,10 @@ def _created_at_iso(j: dict) -> str | None:
 
 
 class LeverScraper(BaseScraper):
-    async def scrape(self, company: str):
+    async def scrape(self, company: str, skip_urls: set[str] | None = None):
+        if skip_urls is None:
+            skip_urls = set()
+
         data = await self.fetch(f"https://api.lever.co/v0/postings/{company}?mode=json")
         if not isinstance(data, list):
             # Lever returns an error object (not a list) for bad/unknown company slugs.
@@ -41,7 +45,7 @@ class LeverScraper(BaseScraper):
                 "location": (j.get("categories") or {}).get("location"),
                 "url": j["hostedUrl"],
                 "source": "lever",
-                "posted_at": _created_at_iso(j),
+                "posted_at": _created_at_iso(j),  # ISO 8601 string, parsed by pipeline._parse_posted_at
                 "content": _build_content(j),
             })
         return jobs
