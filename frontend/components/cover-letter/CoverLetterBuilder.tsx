@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LuArrowLeft } from "react-icons/lu";
-import { toaster } from "@/components/ui/toaster";
 import { useAuth } from "@/lib/AuthContext";
 import { getApplicantProfile, ApplicantProfile } from "@/lib/api";
+import { useDocDownload } from "@/lib/useDocDownload"; // NEW (docs paywall)
+import { printDocument, copyText, downloadTextFile } from "@/lib/docActions"; // NEW (docs paywall)
 import CoverLetterPreview from "./CoverLetterPreview";
 import {
   COVER_LETTER_TEMPLATES, CoverLetterData, DEFAULT_TEMPLATE_ID, EMPTY_COVER_LETTER,
@@ -51,6 +52,9 @@ export default function CoverLetterBuilder() {
   const [templateId, setTemplateId] = useState(isValidTemplateId(urlTemplate) ? urlTemplate : DEFAULT_TEMPLATE_ID);
   const [data, setData] = useState<CoverLetterData>(EMPTY_COVER_LETTER);
   const [hydrated, setHydrated] = useState(false);
+
+  // NEW (docs paywall): 1 free download, then $3.99 unlocks 5 more cover letters (and 5 CVs)
+  const { run, paywall, working, remaining } = useDocDownload("cover_letter");
 
   useEffect(() => {
     if (!loading && !user) router.replace("/");
@@ -117,23 +121,16 @@ export default function CoverLetterBuilder() {
     router.replace(`/applicant/cover-letter-builder?template=${id}`, { scroll: false });
   };
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(toPlainText(data));
-      toaster.create({ title: "Copied as plain text", type: "success" });
-    } catch {
-      toaster.create({ title: "Couldn't copy", type: "error" });
-    }
-  };
+  // CHANGED (docs paywall): every download button spends one cover-letter download first,
+  // runs the action, then returns the applicant to the dashboard. Locked -> paywall dialog.
+  const handlePrint = () => run((authorized) => printDocument(authorized), null);
+
+  const handleCopy = () =>
+    run((authorized) => copyText(toPlainText(data), authorized), "Copied as plain text", "Couldn't copy");
 
   const handleDownloadTxt = () => {
-    const blob = new Blob([toPlainText(data)], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${(data.fullName || "cover-letter").trim().replace(/\s+/g, "-").toLowerCase()}-cover-letter.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const filename = `${(data.fullName || "cover-letter").trim().replace(/\s+/g, "-").toLowerCase()}-cover-letter.txt`;
+    return run((authorized) => downloadTextFile(filename, toPlainText(data), authorized), "Downloaded .txt");
   };
 
   if (loading || !user) return null;
@@ -215,14 +212,19 @@ export default function CoverLetterBuilder() {
 
           {/* PREVIEW */}
           <Box flex="1" minW={0} w="100%">
+            {remaining !== null && (
+              <Text fontSize="xs" color="gray.500" mb={2}>
+                {remaining} cover letter download{remaining === 1 ? "" : "s"} left
+              </Text>
+            )}
             <Wrap gap={2} mb={4}>
-              <Button colorPalette="brand" size="sm" onClick={() => window.print()}>
+              <Button colorPalette="brand" size="sm" onClick={handlePrint} disabled={working}>
                 Print / Save as PDF
               </Button>
-              <Button variant="outline" colorPalette="brand" size="sm" onClick={handleCopy}>
+              <Button variant="outline" colorPalette="brand" size="sm" onClick={handleCopy} disabled={working}>
                 Copy as text
               </Button>
-              <Button variant="outline" colorPalette="brand" size="sm" onClick={handleDownloadTxt}>
+              <Button variant="outline" colorPalette="brand" size="sm" onClick={handleDownloadTxt} disabled={working}>
                 Download .txt
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setData({ ...SAMPLE_COVER_LETTER })}>
@@ -248,6 +250,8 @@ export default function CoverLetterBuilder() {
           </Box>
         </Flex>
       </Box>
+
+      {paywall}
     </Box>
   );
 }
