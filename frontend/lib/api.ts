@@ -178,6 +178,42 @@ export const startAtsCheckout = () => authedFetch("/api/ats/checkout", { method:
 export const verifyAtsPayment = (reference: string) =>
   authedFetch(`/api/ats/verify/${reference}`);
 
+// ── CV templates + cover letter paywall (one unit: 1 free download each, then $3.99 = 5 more each) ──
+export type DocKind = "cv" | "cover_letter";
+
+export type DocKindStatus = {
+  free_remaining: number;
+  paid_remaining: number;
+  remaining: number;
+  locked: boolean;
+};
+
+export type DocQuota = {
+  cv: DocKindStatus;
+  cover_letter: DocKindStatus;
+  pack_price_usd: number;
+  pack_price_kes: number;
+  pack_downloads_each: number;
+};
+
+export const getDocQuota = () => authedFetch("/api/documents/quota");
+
+// Spend one download BEFORE the browser action. 402 = locked for that kind.
+// Success body: { ok, credit, consumption_id, quota }
+export const consumeDocCredit = (kind: DocKind) =>
+  authedFetch("/api/documents/consume", { method: "POST", body: JSON.stringify({ kind }) });
+
+// Only for when the browser action itself failed (one-shot, owner-only, 5-minute window)
+export const refundDocCredit = (consumptionId: string) =>
+  authedFetch(`/api/documents/refund/${consumptionId}`, { method: "POST" });
+
+// Returns { authorization_url, reference }
+export const startDocCheckout = () => authedFetch("/api/documents/checkout", { method: "POST" });
+
+// Returns { status: "completed" | "pending" | "failed" | "unknown", quota }
+export const verifyDocPayment = (reference: string) =>
+  authedFetch(`/api/documents/verify/${reference}`);
+
 // Lets any component that spends or unlocks scans tell ATSScanCard to refresh its badge
 export const ATS_QUOTA_CHANGED_EVENT = "ats-quota-changed";
 export const notifyAtsQuotaChanged = () => {

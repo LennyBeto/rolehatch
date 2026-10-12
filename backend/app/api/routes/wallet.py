@@ -19,7 +19,7 @@ from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.wallet import Wallet, WalletTransaction
 from app.schemas.wallet import DepositIn, BachsDepositIn, PaypalDepositIn, PaystackDepositIn, WithdrawIn
-from app.services import mpesa, bachs, paypal, paystack, ats_quota
+from app.services import mpesa, bachs, paypal, paystack, ats_quota, doc_quota
 
 logger = logging.getLogger("perchrole.wallet")
 router = APIRouter()
@@ -374,6 +374,8 @@ async def paystack_webhook(request: Request, db: Session = Depends(get_db)):
             _settle_paystack(db, reference, data)  # wallet deposit
         elif reference.startswith(ats_quota.REFERENCE_PREFIX):
             ats_quota.settle_pack(db, reference, data)  # ATS scan pack purchase
+        elif reference.startswith(doc_quota.REFERENCE_PREFIX):
+            doc_quota.settle_pack(db, reference, data)  # CV template + cover letter download pack
     return {"received": True}
 
 
