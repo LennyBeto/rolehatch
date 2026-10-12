@@ -113,14 +113,15 @@ class Settings(BaseSettings):
         alias="MPESA_CALLBACK_SECRET",
     )
 
-    # ── Paystack + CV template build packs + ATS scan packs ──
+    # ── Paystack + CV template build packs + ATS scan packs + CV/cover-letter download packs ──
     # The same secret key also powers wallet card/bank deposits (KES) in api/routes/wallet.py,
-    # and ATS scan pack purchases (KES, settled through the wallet's shared Paystack webhook),
-    # so the Paystack account needs KES enabled alongside CV_PACK_CURRENCY.
+    # ATS scan pack purchases and CV/cover-letter download pack purchases (both KES, settled
+    # through the wallet's shared Paystack webhook), so the Paystack account needs KES enabled
+    # alongside CV_PACK_CURRENCY.
     paystack_secret_key: str = Field(
         default="",
         description="Paystack secret key — used for checkout initialization and webhook "
-        "signature (HMAC-SHA512) verification; empty disables CV/ATS pack purchases",
+        "signature (HMAC-SHA512) verification; empty disables CV/ATS/document pack purchases",
         alias="PAYSTACK_SECRET_KEY",
     )
     cv_pack_price_minor: int = Field(
@@ -138,6 +139,13 @@ class Settings(BaseSettings):
         gt=0,
         description="KES price of the 3-scan ATS pack (~$3.99) — update when the exchange rate moves",
         alias="ATS_PACK_PRICE_KES",
+    )
+    docs_pack_price_kes: int = Field(
+        default=520,
+        gt=0,
+        description="KES price of the CV-template + cover-letter download pack (~$3.99 = 5 downloads "
+        "of each) — update when the exchange rate moves",
+        alias="DOCS_PACK_PRICE_KES",
     )
 
     # ── PayPal (wallet deposits, charged in USD) ─────────────
