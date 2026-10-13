@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
 import { authedFetch } from "@/lib/api";
 import { toaster } from "@/components/ui/toaster";
+import PaginationControls from "@/components/PaginationControls";
 
 type Tx = {
   id: string; type: "deposit" | "withdrawal"; amount: number; status: string;
@@ -15,6 +16,7 @@ type WalletData = { balance: number; currency: string; phone_masked: string | nu
 
 const MIN_AMOUNT = 10;
 const MAX_AMOUNT = 150000;
+const TX_PAGE_SIZE = 8;
 
 const fmt = (amount: number, currency = "KES") =>
   new Intl.NumberFormat("en-KE", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
@@ -40,7 +42,9 @@ export default function WalletPage() {
   const [withdrawAmt, setWithdrawAmt] = useState("");
   const [bachsRate, setBachsRate] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [txPage, setTxPage] = useState(1);
   const verifiedRef = useRef(false);
+  const txTopRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/");
@@ -247,10 +251,25 @@ export default function WalletPage() {
     });
   };
 
+  const handleTxPageChange = (next: number) => {
+    setTxPage(next);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    txTopRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  };
+
   if (loading || !user) return null;
 
   const bachsUsdPreview =
     bachsRate && validAmount(bachsAmt) ? (Math.ceil((Number(bachsAmt) / bachsRate) * 100) / 100).toFixed(2) : null;
+
+  // Transactions pagination: 8 per page. The page is clamped so the 4s pending-poll
+  // or a shrinking list can never leave the user on an out-of-range page.
+  const transactions = wallet?.transactions ?? [];
+  const txTotalPages = Math.max(1, Math.ceil(transactions.length / TX_PAGE_SIZE));
+  const txCurrentPage = Math.min(txPage, txTotalPages);
+  const txStart = (txCurrentPage - 1) * TX_PAGE_SIZE;
+  const visibleTransactions = transactions.slice(txStart, txStart + TX_PAGE_SIZE);
+  const txCurrency = wallet?.currency ?? "KES";
 
   return (
     <Box maxW="1200px" mx="auto" mt={12} px={4}>
@@ -360,25 +379,40 @@ export default function WalletPage() {
         </Box>
       </SimpleGrid>
 
-      <Heading size="sm" mb={3}>Transactions</Heading>
-      <Stack gap={2}>
-        {wallet?.transactions.map((t) => (
-          <Flex key={t.id} p={3} bg="surface" border="1px solid #E5E3DD" borderRadius="md"
-            justify="space-between" align="center">
-            <Box>
-              <Text fontWeight="600" textTransform="capitalize">{t.type}</Text>
-              <Text fontSize="xs" color="gray.500">
-                {new Date(t.created_at).toLocaleString()}{t.receipt ? ` · ${t.receipt}` : ""}
-              </Text>
-            </Box>
-            <HStack>
-              <Badge colorPalette={STATUS_COLORS[t.status] ?? "gray"}>{t.status}</Badge>
-              <Text fontWeight="600">{t.type === "deposit" ? "+" : "−"}{fmt(t.amount, wallet.currency)}</Text>
-            </HStack>
-          </Flex>
-        ))}
-        {wallet && wallet.transactions.length === 0 && <Text color="gray.500">No transactions yet.</Text>}
-      </Stack>
+      <Box ref={txTopRef} scrollMarginTop="80px">
+        <Heading size="sm" mb={3}>Transactions</Heading>
+        <Stack gap={2}>
+          {visibleTransactions.map((t) => (
+            <Flex key={t.id} p={3} bg="surface" border="1px solid #E5E3DD" borderRadius="md"
+              justify="space-between" align="center" gap={3}>
+              <Box minW={0}>
+                <Text fontWeight="600" textTransform="capitalize">{t.type}</Text>
+                <Text fontSize="xs" color="gray.500" wordBreak="break-word">
+                  {new Date(t.created_at).toLocaleString()}{t.receipt ? ` · ${t.receipt}` : ""}
+                </Text>
+              </Box>
+              <HStack flexShrink={0}>
+                <Badge colorPalette={STATUS_COLORS[t.status] ?? "gray"}>{t.status}</Badge>
+                <Text fontWeight="600">{t.type === "deposit" ? "+" : "−"}{fmt(t.amount, txCurrency)}</Text>
+              </HStack>
+            </Flex>
+          ))}
+          {wallet && transactions.length === 0 && <Text color="gray.500">No transactions yet.</Text>}
+        </Stack>
+
+        {txTotalPages > 1 && (
+          <>
+            <Text fontSize="xs" color="gray.500" textAlign="center" mt={4}>
+              Showing {txStart + 1}–{Math.min(txStart + TX_PAGE_SIZE, transactions.length)} of {transactions.length}
+            </Text>
+            <PaginationControls
+              currentPage={txCurrentPage}
+              totalPages={txTotalPages}
+              onPageChange={handleTxPageChange}
+            />
+          </>
+        )}
+      </Box>
     </Box>
   );
 }
