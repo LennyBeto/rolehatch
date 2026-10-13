@@ -212,7 +212,8 @@ async def fetch_company_jobs(company: Company) -> list[dict]:
 
 
 def persist_company_jobs(db: Session, company: Company, raw_jobs: list[dict]) -> dict:
-    """DB step: bulk upsert per chunk + safe stale deactivation."""
+    """DB step: bulk upsert per chunk + safe stale deactivation.
+    Blocking — call it from a worker thread (internal.py does, with its own session)."""
     platform = company.source_platform
     rows: dict[str, dict] = {}
 
@@ -248,6 +249,15 @@ def persist_company_jobs(db: Session, company: Company, raw_jobs: list[dict]) ->
         return {"upserted": 0, "deactivated": 0, "skipped": True}
 
     try:
+        scope = (
+            Job.company_id == company.id,
+            Job.source == platform,        # never touch 'direct' employer-posted jobs
+            Job.is_active.is_(True),
+        )
+        # Counted BEFORE the upsert so newly inserted rows don't inflate the baseline
+        # the partial-scrape guard compares against.
+        prev_active = db.query(func.count(Job.id)).filter(*scope).scalar() or 0
+
         for chunk in _chunks(list(rows.values()), UPSERT_CHUNK):
             ins = pg_insert(Job).values(chunk)
             ins = ins.on_conflict_do_update(
@@ -274,12 +284,6 @@ def persist_company_jobs(db: Session, company: Company, raw_jobs: list[dict]) ->
             )
             db.execute(ins)
 
-        scope = (
-            Job.company_id == company.id,
-            Job.source == platform,        # never touch 'direct' employer-posted jobs
-            Job.is_active.is_(True),
-        )
-
         # Platforms that expose no date (e.g. BambooHR list): use first-seen time so
         # no listing shows "Recently posted". The upsert's coalesce() swaps in the
         # real platform date as soon as a scrape provides one.
@@ -287,7 +291,6 @@ def persist_company_jobs(db: Session, company: Company, raw_jobs: list[dict]) ->
             {"posted_at": func.now()}, synchronize_session=False
         )
 
-        prev_active = db.query(func.count(Job.id)).filter(*scope).scalar() or 0
         deactivated = 0
         if prev_active >= 20 and len(rows) < prev_active * MIN_SCRAPE_RATIO:
             logger.warning(
