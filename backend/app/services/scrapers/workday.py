@@ -1,11 +1,14 @@
 # backend/app/services/scrapers/workday.py
 import logging
-
 import httpx
+import re
+from datetime import datetime, timezone, timedelta
 
 from .base import BaseScraper
 
 logger = logging.getLogger("perchrole.workday")
+
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
 
 class WorkdayScraper(BaseScraper):
@@ -16,6 +19,30 @@ class WorkdayScraper(BaseScraper):
     Descriptions live on a per-job detail endpoint:
     https://{tenant}.wd{n}.myworkdayjobs.com/wday/cxs/{tenant}/{site}{externalPath}
     """
+
+    @staticmethod
+    def _posted_on_to_iso(text: str | None) -> str | None:
+        """Normalise Workday date fields to something the pipeline can parse.
+        - ISO dates ('2026-09-10', detail 'startDate') pass through unchanged.
+        - 'Posted Today' / 'Posted Yesterday' / 'Posted 5 Days Ago' -> UTC midnight of that day.
+          Midnight keeps the value stable across hourly runs.
+        - '30+ Days Ago' is too vague, so None."""
+        if not text:
+            return None
+        text = text.strip()
+        if _ISO_DATE.match(text):
+            return text
+        t = text.lower()
+        if "30+" in t:
+            return None
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        if "today" in t:
+            return today.isoformat()
+        if "yesterday" in t:
+            return (today - timedelta(days=1)).isoformat()
+        m = re.search(r"(\d+)\s+day", t)
+        return (today - timedelta(days=int(m.group(1)))).isoformat() if m else None
+
     async def scrape(
         self,
         tenant: str,
@@ -57,7 +84,9 @@ class WorkdayScraper(BaseScraper):
                         "location": p.get("locationsText"),
                         "url": job_url,
                         "source": "workday",
-                        "posted_at": None,
+                        # List-level 'postedOn' ("Posted 3 Days Ago") gives every job a date,
+                        # even when the detail call is skipped or capped below.
+                        "posted_at": self._posted_on_to_iso(p.get("postedOn")),
                         "content": None,
                     }
                     # Only fetch detail for postings that still lack a description,
@@ -69,7 +98,12 @@ class WorkdayScraper(BaseScraper):
                     ):
                         info = await self._fetch_detail(client, f"{host}/wday/cxs/{tenant}/{site}{external_path}")
                         job["content"] = info.get("jobDescription")
-                        job["posted_at"] = info.get("startDate")  # ISO date, e.g. "2026-09-10"
+                        # Exact ISO startDate wins, then the detail's relative text, then the list value.
+                        job["posted_at"] = (
+                            self._posted_on_to_iso(info.get("startDate"))
+                            or self._posted_on_to_iso(info.get("postedOn"))
+                            or job["posted_at"]
+                        )
                         details_fetched += 1
                         await self.polite_delay(1.0)
                     jobs.append(job)
