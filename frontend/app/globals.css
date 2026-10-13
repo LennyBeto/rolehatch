@@ -2,8 +2,9 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #F6F5F1;
+  --foreground: #1F2A24;
+  --ring: #2F4F3F;
   color-scheme: light;
 }
 
@@ -17,14 +18,15 @@
 .dark {
   --background: #0f1210;
   --foreground: #ededed;
-  /* Was a flat mid-gray (#4b5563) — read as a bright, hard-edged line against
-     near-black surfaces. A low-opacity white scales with whatever's behind it
-     (background vs surface), so it reads as a soft hairline instead of a
-     screaming outline, and section dividers blend rather than cut sharply. */
+  --ring: #9CC5AE;
+  /* Low-opacity white scales with whatever's behind it (background vs surface),
+     so it reads as a soft hairline instead of a hard-edged outline. */
   --border-soft: rgba(255, 255, 255, 0.09);
   color-scheme: dark;
 }
 
+/* Safety net: keeps every border (including any still hardcoded) soft in dark mode.
+   Once all "#E5E3DD" borders are migrated to {colors.line}, this block can be deleted. */
 html.dark *,
 html.dark *::before,
 html.dark *::after {
@@ -34,6 +36,37 @@ html.dark *::after {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
   transition: background 0.15s ease, color 0.15s ease;
+}
+
+/* Visible keyboard focus everywhere; component-level focus styles still win */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(47, 79, 63, 0.18);
+}
+.dark ::selection {
+  background: rgba(156, 197, 174, 0.28);
+}
+
+/* Smooth anchor jumps (#listings) only when the user hasn't asked for less motion */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
