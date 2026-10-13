@@ -49,6 +49,17 @@ export default function HeroSection() {
     router.push(`/?${params.toString()}#listings`);
   };
 
+  // Reset to the default, unfiltered job list: clear the hero inputs and
+  // drop every search/filter param (title, location, quick_filter,
+  // remote_type, salary_*, page) from the URL, then jump to the listings.
+  const handleBrowseAll = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    setTitle("");
+    setLocation("");
+    setCategory([""]);
+    router.push("/#listings");
+  };
+
   return (
     <Box bg="background" py={{ base: 10, md: 20 }} px={4} textAlign="center">
       <Heading
@@ -156,7 +167,7 @@ export default function HeroSection() {
           borderRadius="full"
           px={8}
         >
-          <a href="#listings">Browse All Jobs</a>
+          <a href="/#listings" onClick={handleBrowseAll}>Browse All Jobs</a>
         </Button>
       </HStack>
     </Box>
