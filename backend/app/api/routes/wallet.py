@@ -6,6 +6,7 @@ import uuid
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
+from anyio import from_thread
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from slowapi import Limiter
@@ -65,6 +66,28 @@ def _restore_withdrawal(db: Session, tx_id: UUID) -> None:
 
 def _mask(phone: str | None) -> str | None:
     return f"{phone[:5]}•••{phone[-3:]}" if phone else None
+
+
+def _require_mpesa(*names: str) -> None:
+    """Fail fast (before creating a transaction or debiting a wallet) if Daraja settings are missing."""
+    missing = [n for n in names if not getattr(settings, n)]
+    if missing:
+        logger.error("M-Pesa not configured, missing: %s", ", ".join(n.upper() for n in missing))
+        raise HTTPException(503, "M-Pesa is not configured")
+
+
+def _stk_push(phone: str, amount: int, reference: str) -> str:
+    """Sync bridge: wallet endpoints run in a worker thread, mpesa.py is async.
+    Returns the CheckoutRequestID."""
+    resp = from_thread.run(mpesa.initiate_stk_push, phone, amount, reference, "Wallet top-up")
+    checkout_id = resp.get("CheckoutRequestID")
+    if not checkout_id:
+        raise mpesa.MpesaError("Daraja did not return a CheckoutRequestID")
+    return checkout_id
+
+
+def _b2c_payout(tx_id: str, phone: str, amount: int) -> dict:
+    return from_thread.run(mpesa.initiate_b2c_payment, tx_id, phone, amount, "Wallet withdrawal")
 
 
 def _settle_paystack(db: Session, reference: str, data: dict) -> str:
@@ -239,6 +262,10 @@ def create_deposit(
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _require_mpesa(
+        "mpesa_consumer_key", "mpesa_consumer_secret", "mpesa_shortcode",
+        "mpesa_passkey", "mpesa_callback_url", "mpesa_callback_secret",
+    )
     try:
         phone = mpesa.normalize_phone(payload.phone)
     except ValueError as e:
@@ -251,13 +278,18 @@ def create_deposit(
     db.refresh(tx)
 
     try:
-        tx.checkout_request_id = mpesa.stk_push(phone, payload.amount, reference=f"WLT{str(tx.id)[:8]}")
+        tx.checkout_request_id = _stk_push(phone, payload.amount, f"WLT{str(tx.id)[:8]}")
         db.commit()
     except mpesa.MpesaError as e:
         logger.exception("STK push failed for tx %s", tx.id)
         tx.status = "failed"
         db.commit()
         raise HTTPException(502, f"Couldn't start M-Pesa payment: {e}")
+    except Exception:
+        logger.exception("Unexpected error starting STK push for tx %s", tx.id)
+        tx.status = "failed"
+        db.commit()
+        raise HTTPException(502, "Couldn't start M-Pesa payment — please try again")
     return {"ok": True, "message": "Check your phone and enter your M-Pesa PIN"}
 
 
@@ -269,6 +301,11 @@ def create_withdrawal(
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _require_mpesa(
+        "mpesa_consumer_key", "mpesa_consumer_secret", "mpesa_shortcode",
+        "mpesa_initiator_name", "mpesa_security_credential",
+        "mpesa_result_url", "mpesa_timeout_url", "mpesa_callback_secret",
+    )
     wallet = _get_or_create_wallet(db, UUID(user["sub"]), lock=True)
     if not wallet.phone:
         raise HTTPException(400, "Make a deposit first — withdrawals go to the M-Pesa number you deposit from")
@@ -286,8 +323,8 @@ def create_withdrawal(
     db.refresh(tx)
 
     try:
-        mpesa.b2c_payout(str(tx.id), wallet.phone, payload.amount)
-    except mpesa.MpesaError:
+        _b2c_payout(str(tx.id), wallet.phone, payload.amount)
+    except Exception:  # MpesaError or a programming error: either way the user must not lose the debit
         logger.exception("B2C request failed for tx %s", tx.id)
         _restore_withdrawal(db, tx.id)
         raise HTTPException(502, "Withdrawal failed — your balance was restored")
