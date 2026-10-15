@@ -1,5 +1,6 @@
 # backend/app/core/config.py
 import json
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import AliasChoices, Field, field_validator
@@ -8,7 +9,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=Path(__file__).resolve().parents[2] / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
@@ -41,7 +42,14 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("UPSTASH_REDIS_TOKEN", "UPSTASH_REDIS_REST_TOKEN"),
     )
 
-    frontend_url: str = Field(..., description="Frontend URL", alias="FRONTEND_URL")
+    # Defaults to the local Next.js dev server so the API boots without this var set.
+    # In production, ALWAYS set FRONTEND_URL (e.g. https://rolehatch.com): it is used to
+    # build Paystack/PayPal callback and redirect URLs.
+    frontend_url: str = Field(
+        default="http://localhost:3000",
+        description="Frontend base URL (no trailing slash)",
+        alias="FRONTEND_URL",
+    )
     revalidate_secret: str = Field(
         default="",
         description="Shared secret for the frontend /api/revalidate webhook "
@@ -77,7 +85,6 @@ class Settings(BaseSettings):
         description="Gemini model used by Perchie",
         alias="CHAT_MODEL",
     )
-
 
     # ── Perchie chatbot anthropic ──────────────────────────────────────
     # Previous provider: Anthropic — kept for future use. To switch back, uncomment these,
@@ -182,6 +189,14 @@ class Settings(BaseSettings):
         description="KES per 1 USD used to price Bachs wallet deposits — update when the rate moves",
         alias="BACHS_KES_PER_USD",
     )
+
+    @field_validator("frontend_url")
+    @classmethod
+    def normalize_frontend_url(cls, v):
+        # Callback URLs are built as f"{frontend_url}/path", so a trailing slash
+        # would produce "//path". An empty value falls back to the local dev server.
+        v = (v or "").strip().rstrip("/")
+        return v or "http://localhost:3000"
 
     @field_validator("paypal_env", mode="before")
     @classmethod
