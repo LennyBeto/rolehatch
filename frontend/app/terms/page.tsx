@@ -4,7 +4,7 @@ import NextLink from "next/link";
 
 export const metadata = { title: "Terms of Service — PerchRole" };
 
-const LAST_UPDATED = "October 7, 2026";
+const LAST_UPDATED = "October 15, 2026";
 
 type Section = { title: string; body?: string[]; items?: string[] };
 
@@ -18,7 +18,7 @@ const SECTIONS: Section[] = [
   {
     title: "2. Using PerchRole",
     body: [
-      "PerchRole is a free job search platform for job seekers. Searching and filtering are open to everyone. Creating an account lets you view listing links, save jobs, track application status, and subscribe to job alerts. You must be at least 16 years old to use the service.",
+      "PerchRole is a free job search platform for job seekers. Searching and filtering are open to everyone. Creating an account lets you view listing links, save jobs, track application status, and subscribe to job alerts, all free of charge. Applicants only pay for optional features, as described in section 5. You must be at least 16 years old to use the service.",
     ],
   },
   {
@@ -34,9 +34,11 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    title: "5. Featured listings and payments",
+    title: "5. Payments, optional applicant features, and featured listings",
     body: [
-      "Employers may pay a one-time fee to feature a listing at the top of relevant search results for 14 days. Payments are processed through Safaricom M-Pesa, and the feature is activated after payment is confirmed. Featured placement improves visibility only. We do not guarantee views, applications, or hires. Fees are one-time charges, not subscriptions. If a payment problem occurs or you believe you were charged in error, contact us through Contact Support with your M-Pesa transaction reference and we will review it.",
+      "Applicants only pay for optional tools such as ATS screening, CV generation, and cover letter generation. Everything else on PerchRole remains free. Some tools include a free allowance, and the current allowance and price are shown before you confirm any purchase. If a paid build fails, the credit used for it is returned to you.",
+      "Employers may pay a one-time fee to feature a listing at the top of relevant search results for 14 days. Featured placement improves visibility only. We do not guarantee views, applications, or hires.",
+      "All payments are processed by Paystack, and purchases are activated only after Paystack confirms the payment. By paying, you also agree to Paystack's terms. We never see or store your card or mobile-money details. Fees are one-time charges, not subscriptions. If a payment problem occurs or you believe you were charged in error, contact us through Contact Support with your Paystack transaction reference and we will review it.",
     ],
   },
   {
@@ -65,7 +67,7 @@ const SECTIONS: Section[] = [
   {
     title: "9. No warranty",
     body: [
-      "PerchRole is provided \"as is\" and \"as available\" without warranties of any kind. We do not guarantee job placement, responses from employers, or uninterrupted, error-free availability of the service.",
+      "PerchRole is provided \"as is\" and \"as available\" without warranties of any kind. We do not guarantee job placement, responses from employers, or uninterrupted, error-free availability of the service. ATS screening results and generated CVs or cover letters are aids only, so please review them before use. They do not guarantee any hiring outcome.",
     ],
   },
   {
