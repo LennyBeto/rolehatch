@@ -44,6 +44,12 @@ _KW_PATTERNS = {
     for kw in TECH_KEYWORDS
 }
 
+# Work-environment detection (location + title).
+_REMOTE_RE = re.compile(r"\bremote\b|\bwork from home\b|\bwfh\b", re.I)
+_HYBRID_RE = re.compile(r"\bhybrid\b", re.I)
+_FIELD_RE = re.compile(r"\bfield\b", re.I)
+_ONSITE_RE = re.compile(r"\bon[\s-]?site\b|\bin[\s-]office\b|\bin[\s-]person\b", re.I)
+
 SENIOR_KEYWORDS = ["senior", "staff", "principal", "lead", "director", "vp", "head of"]
 ENTRY_KEYWORDS = ["junior", "entry", "associate", "intern", "graduate"]
 
@@ -120,15 +126,24 @@ def _infer_level(title: str) -> str:
     return "mid"
 
 
-def _infer_remote_type(location: str | None) -> str | None:
-    if not location:
+def infer_remote_type(location: str | None, title: str | None = None) -> str | None:
+    """Work environment from location + title.
+    remote > hybrid > field > explicit on-site > onsite by default when a
+    physical location exists and nothing says otherwise."""
+    text = " ".join(part for part in (location, title) if part)
+    if not text:
         return None
-    loc_lower = location.lower()
-    if "remote" in loc_lower:
+    if _REMOTE_RE.search(text):
         return "remote"
-    if "hybrid" in loc_lower:
+    if _HYBRID_RE.search(text):
         return "hybrid"
-    return None  # unknown — leave null rather than guessing "onsite" incorrectly
+    if _FIELD_RE.search(text):
+        return "field"
+    if _ONSITE_RE.search(text):
+        return "onsite"
+    if location and location.strip():
+        return "onsite"
+    return None
 
 
 def _extract_tech_stack(title: str | None, description: str | None) -> list[str]:
@@ -238,7 +253,7 @@ def persist_company_jobs(db: Session, company: Company, raw_jobs: list[dict]) ->
             "posted_at": _parse_posted_at(j.get("posted_at")),
             "description": description,
             "level": _infer_level(title),
-            "remote_type": j.get("remote_type") or _infer_remote_type(location),
+            "remote_type": j.get("remote_type") or infer_remote_type(location, title),
             "tech_stack": _extract_tech_stack(title, description),
             "embedding": j.get("embedding"),
         }
