@@ -4,7 +4,7 @@ import NextLink from "next/link";
 
 export const metadata = { title: "Privacy Policy — PerchRole" };
 
-const LAST_UPDATED = "October 7, 2026";
+const LAST_UPDATED = "October 15, 2026";
 
 type Section = { title: string; body?: string[]; items?: string[]; after?: string };
 
@@ -16,8 +16,9 @@ const SECTIONS: Section[] = [
       "Account data: your email address, collected through Supabase Authentication (magic-link sign-in). We never see or store a password.",
       "Job activity: jobs you save, mark as applied, or hide, tied to your account.",
       "Job alerts: your email, optional keyword, work-environment filter, and notification frequency.",
+      "Applicant tool data: if you use the optional ATS screening, CV generation, or cover letter generation tools, the CV and profile details you provide so we can deliver those features.",
       "Employer data: company name, job details you submit (title, location, salary range, application URL), and the email domain of your account, which we use to verify ownership of listings.",
-      "Payment data: when you pay for a featured listing, the M-Pesa phone number you enter and the transaction reference and status returned by Safaricom, so we can activate and reconcile your purchase.",
+      "Payment data: when you pay for an optional applicant feature or a featured listing, the transaction reference, amount, and status returned by Paystack, so we can credit and reconcile your purchase. We never see or store your card or mobile-money details.",
       "Support messages: the email, subject, and message you send through our Contact Support form.",
       "Technical data: IP address and request metadata, processed to operate the service, apply rate limits, and prevent abuse.",
     ],
@@ -26,8 +27,9 @@ const SECTIONS: Section[] = [
     title: "2. How we use your information",
     items: [
       "To provide search, saved jobs, application tracking, and job alert emails.",
+      "To deliver the optional ATS screening, CV generation, and cover letter generation tools you choose to use.",
       "To verify that employers only manage listings belonging to their email domain.",
-      "To process featured-listing payments and activate them once payment is confirmed.",
+      "To process payments for optional applicant features and featured listings, and to activate them once payment is confirmed.",
       "To respond to support requests and protect the platform from spam and abuse.",
       "To maintain, secure, and improve the service.",
     ],
@@ -42,7 +44,8 @@ const SECTIONS: Section[] = [
   {
     title: "4. Payments",
     body: [
-      "Featured-listing payments are processed through Safaricom M-Pesa (Daraja API). You authorize each payment on your own phone, and we never see or store your M-Pesa PIN. We keep only what is needed to activate the feature and reconcile payments: the listing ID, the account that purchased it, the transaction reference and status, and the featured-until date.",
+      "PerchRole is free for job seekers. Searching, filtering, saving jobs, tracking applications, and job alerts cost nothing. Applicants only pay for optional features such as ATS screening, CV generation, and cover letter generation. Employers may optionally pay to feature a listing.",
+      "All payments are processed by Paystack. We never see or store your card or mobile-money details. We keep only what is needed to credit your purchase and reconcile payments: the account that made the purchase, the transaction reference, amount and status, and, for featured listings, the listing ID and featured-until date.",
     ],
   },
   {
@@ -50,8 +53,9 @@ const SECTIONS: Section[] = [
     body: ["We rely on the following providers to run PerchRole:"],
     items: [
       "Supabase: authentication and database hosting.",
-      "Safaricom M-Pesa (Daraja API): payment processing for featured job listings.",
+      "Paystack: payment processing for optional applicant features and featured job listings.",
       "Upstash: temporary caching of search results and scraper data.",
+      "Google AI Studio (Gemini): powers the Perchie assistant and the CV tools.",
       "Vercel and Google Cloud: hosting for the website and API.",
       "Google's favicon service: displays company logos. Your browser requests each logo using the company's domain, so Google may receive your IP address.",
     ],
