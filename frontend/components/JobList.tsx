@@ -38,6 +38,7 @@ export default function JobList() {
     const title = searchParams.get("title");
     const remoteType = searchParams.get("remote_type");
     const salaryMin = searchParams.get("salary_min");
+    const salaryMax = searchParams.get("salary_max");
     const location = searchParams.get("location");
     // Sidebar sets "languages" (comma-separated); fall back to the legacy "language" param
     const languages = searchParams.get("languages") ?? searchParams.get("language");
@@ -46,6 +47,7 @@ export default function JobList() {
     if (title) params.set("title", title);
     if (remoteType) params.set("remote_type", remoteType);
     if (salaryMin) params.set("salary_min", salaryMin);
+    if (salaryMax) params.set("salary_max", salaryMax);
     if (location) params.set("location", location);
     if (languages) params.set("languages", languages);
     if (quickFilter) params.set("quick_filter", quickFilter);
