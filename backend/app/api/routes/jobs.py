@@ -1,5 +1,6 @@
 # backend/app/api/routes/jobs.py
 import re
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import String, case, cast, func, or_, select
@@ -7,7 +8,7 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
-from app.core.cache import cache_key, get_cached, set_cached
+from app.core.cache import cache_key, get_cached, job_detail_key, set_cached
 from app.core.security import get_current_user_optional
 from app.db.session import get_db
 from app.models.job import Job, Company
@@ -22,8 +23,13 @@ FACETS_CACHE_TTL = 1800
 STATS_CACHE_TTL = 1800
 JOB_DETAIL_CACHE_TTL = 3600
 
-# Bumped so stale cached results (e.g. empty language searches) are discarded.
-SEARCH_CACHE_PREFIX = "search_v3"
+# Bumped so stale cached results are discarded (new remote_type values, salary range
+# semantics, title/tech matching). cache.py invalidates with the wildcard 'search*',
+# so a future bump needs no other change.
+SEARCH_CACHE_PREFIX = "search_v4"
+
+SALARY_SLIDER_MAX = 300   # slider's top end ($k) — treated as "no upper limit"
+SHORT_TERM_LEN = 3        # terms this short match on word boundaries ("pm" != "development")
 
 # Maps what the UI may send -> the exact lowercase keywords pipeline.py stores in Job.tech_stack
 LANGUAGE_ALIASES = {
@@ -56,6 +62,14 @@ def _normalize_languages(raw: str | None) -> list[str]:
     return out[:20]
 
 
+def _title_match(term: str):
+    """Short alphanumeric terms (pm, sre, ai, ux) match whole words only;
+    everything else is a substring match."""
+    if len(term) <= SHORT_TERM_LEN and term.isalnum():
+        return Job.title.op("~*")(rf"\m{term}\M")
+    return Job.title.ilike(f"%{term}%")
+
+
 def build_search_query(
     db: Session,
     location: str | None,
@@ -65,6 +79,7 @@ def build_search_query(
     languages: str | None = None,
     quick_filter: str | None = None,
     resume_embedding: list[float] | None = None,
+    salary_max: int | None = None,
 ):
     q = (
         select(
@@ -96,18 +111,31 @@ def build_search_query(
                 phrases.append(clean_variant)
                 words.extend(word for word in re.split(r"\s+", clean_variant) if word)
 
-        title_filters = [Job.title.ilike(f"%{phrase}%") for phrase in phrases]
-        title_filters.extend(Job.title.ilike(f"%{word}%") for word in words)
+        title_filters = [_title_match(t) for t in dict.fromkeys(phrases + words)]
+        # Also match the tech stack, so "python" finds a "Backend Engineer" role
+        # that lists Python in its description.
+        title_tech = _normalize_languages(",".join(words))
+        if title_tech:
+            title_filters.append(Job.tech_stack.overlap(cast(title_tech, ARRAY(String))))
         if title_filters:
             q = q.where(or_(*title_filters))
 
     if quick_filter:
         phrases = [p.strip().lower() for p in quick_filter.split("|") if p.strip()]
         if phrases:
-            q = q.where(or_(*[Job.title.ilike(f"%{p}%") for p in phrases]))
+            q = q.where(or_(*[_title_match(p) for p in phrases]))
 
-    if salary_min:
-        q = q.where(Job.salary_min >= salary_min)
+    # Salary: a job matches when its range overlaps the selected range. Jobs with
+    # no listed salary are excluded only while a salary filter is active.
+    has_cap = salary_max is not None and salary_max < SALARY_SLIDER_MAX
+    if salary_min or has_cap:
+        job_low = func.coalesce(Job.salary_min, Job.salary_max)
+        job_high = func.coalesce(Job.salary_max, Job.salary_min)
+        if salary_min:
+            q = q.where(job_high >= salary_min)
+        if has_cap:
+            q = q.where(job_low <= salary_max)
+
     if remote_type:
         types = [t.strip().lower() for t in remote_type.split(",") if t.strip()]
         if types:
@@ -178,6 +206,7 @@ def search_jobs(
     location: str | None = None,
     title: str | None = None,
     salary_min: int | None = None,
+    salary_max: int | None = None,
     remote_type: str | None = None,
     languages: str | None = None,   # comma-separated, e.g. "python,go"
     language: str | None = None,    # legacy alias for `languages`
@@ -199,7 +228,8 @@ def search_jobs(
 
     params = {
         "location": location, "title": title, "salary_min": salary_min,
-        "remote_type": remote_type, "languages": sorted(normalized_langs) or None,
+        "salary_max": salary_max, "remote_type": remote_type,
+        "languages": sorted(normalized_langs) or None,
         "quick_filter": quick_filter, "page": page,
     }
     use_cache = resume_embedding is None
@@ -208,7 +238,8 @@ def search_jobs(
         return cached
 
     base_query = build_search_query(
-        db, location, title, salary_min, remote_type, languages_csv, quick_filter, resume_embedding
+        db, location, title, salary_min, remote_type, languages_csv, quick_filter,
+        resume_embedding, salary_max=salary_max,
     )
 
     count_query = select(func.count()).select_from(base_query.order_by(None).subquery())
@@ -266,8 +297,13 @@ def get_platform_stats(db: Session = Depends(get_db)):
 # ── Dynamic path last ──
 @router.get("/{job_id}")
 def get_job(job_id: str, db: Session = Depends(get_db)):
-    # v2 key: older cached entries lack description/level/tech_stack
-    key = f"job:v2:{job_id}"
+    # A non-UUID id would otherwise hit Postgres as a bad cast (22P02) and return 500.
+    try:
+        job_id = str(uuid.UUID(job_id))
+    except ValueError:
+        raise HTTPException(404, "Job not found")
+
+    key = job_detail_key(job_id)  # versioned in cache.py; also what invalidation deletes
     if (cached := get_cached(key)) is not None:
         return cached
 
