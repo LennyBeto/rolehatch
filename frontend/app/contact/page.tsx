@@ -4,6 +4,25 @@ import { Box, Heading, Text, Input, Textarea, Button, Stack } from "@chakra-ui/r
 import { useState } from "react";
 import { toaster } from "@/components/ui/toaster";
 
+// Shared field styling: visible border, inset background, clear hover/focus states
+const fieldStyle = {
+  bg: "background",
+  color: "text",
+  border: "1px solid",
+  borderColor: "brand.border",
+  borderRadius: "md",
+  px: 4,
+  transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+  _motionReduce: { transition: "none" },
+  _placeholder: { color: "gray.500" },
+  _hover: { borderColor: "brand.400" },
+  _focusVisible: {
+    outline: "none",
+    borderColor: "brand.focusRing",
+    boxShadow: "0 0 0 1px {colors.brand.focusRing}",
+  },
+} as const;
+
 export default function ContactPage() {
   const [email, setEmail] = useState("");
   const [subject, setSubject] = useState("");
@@ -30,38 +49,66 @@ export default function ContactPage() {
   };
 
   return (
-    <Box maxW="600px" mx="auto" px={4} py={12}>
+    <Box maxW="600px" mx="auto" px={4} py={{ base: 8, md: 12 }}>
       <Heading size="lg" color="text" mb={1}>Contact Support</Heading>
-      <Text color="gray.600" mb={8}>
+      <Text color="gray.600" mb={6}>
         Questions, feedback, or issues with a listing — we read every message.
       </Text>
 
-      <Box as="form" onSubmit={handleSubmit}>
-        <Stack gap={4}>
-          <Input
-            placeholder="Your email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <Input
-            placeholder="Subject"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            required
-          />
-          <Textarea
-            placeholder="How can we help?"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            rows={6}
-            required
-          />
-          <Button type="submit" colorPalette="brand" size="lg" loading={submitting}>
-            Send Message
-          </Button>
-        </Stack>
+      <Box
+        bg="surface"
+        border="1px solid"
+        borderColor="line"
+        borderRadius="xl"
+        boxShadow="0 4px 20px rgba(0,0,0,0.06)"
+        p={{ base: 4, md: 6 }}
+      >
+        <Box as="form" onSubmit={handleSubmit}>
+          <Stack gap={5}>
+            <Box as="label" display="block">
+              <Text fontSize="sm" fontWeight="600" color="text" mb={1.5}>Email</Text>
+              <Input
+                placeholder="you@email.com"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                size="lg"
+                {...fieldStyle}
+              />
+            </Box>
+
+            <Box as="label" display="block">
+              <Text fontSize="sm" fontWeight="600" color="text" mb={1.5}>Subject</Text>
+              <Input
+                placeholder="What is this about?"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                required
+                size="lg"
+                {...fieldStyle}
+              />
+            </Box>
+
+            <Box as="label" display="block">
+              <Text fontSize="sm" fontWeight="600" color="text" mb={1.5}>Message</Text>
+              <Textarea
+                placeholder="How can we help?"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={6}
+                required
+                resize="vertical"
+                py={3}
+                {...fieldStyle}
+              />
+            </Box>
+
+            <Button type="submit" colorPalette="brand" size="lg" loading={submitting}>
+              Send Message
+            </Button>
+          </Stack>
+        </Box>
       </Box>
     </Box>
   );
