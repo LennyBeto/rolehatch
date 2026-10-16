@@ -4,12 +4,13 @@ import { Flex, Heading, HStack, Button, Text, Box, Avatar, IconButton } from "@c
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { FaDiscord } from "react-icons/fa";
-import { LuBell, LuMenu, LuX } from "react-icons/lu";
+import { LuBell, LuMenu, LuX, LuLock } from "react-icons/lu";
 import Logo from "./Logo";
 import { ColorModeButton } from "@/components/ui/color-mode";
 import { useAuth } from "@/lib/AuthContext";
 import { useNotifications } from "@/lib/NotificationContext";
 import { supabase } from "@/lib/supabaseClient";
+import { DISCORD_ENABLED } from "@/lib/featureFlags";
 import SignInModal from "./SignInModal";
 
 const HOVER_CLOSE_DELAY_MS = 150;
@@ -169,16 +170,59 @@ export default function Header() {
         <Box flex="1" display={{ base: "block", md: "none" }} />
 
         <HStack gap={{ base: 1, md: 3 }} flexShrink={0}>
-          <IconButton
-            asChild
-            variant="ghost"
-            aria-label="Join our Discord"
-            size="sm"
-          >
-            <a href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer">
-              <FaDiscord size={18} />
-            </a>
-          </IconButton>
+          {DISCORD_ENABLED ? (
+            <IconButton
+              asChild
+              variant="ghost"
+              aria-label="Join our Discord"
+              size="sm"
+            >
+              <a href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer">
+                <FaDiscord size={18} />
+              </a>
+            </IconButton>
+          ) : (
+            // Beta lock: no href, no handler, no invite URL in the DOM.
+            // Stays focusable so keyboard and screen-reader users hear why it's unavailable.
+            <IconButton
+              variant="ghost"
+              size="sm"
+              position="relative"
+              aria-disabled="true"
+              aria-label="Discord community, locked while in beta"
+              title="PerchRole Tech Hub is in beta. Opening soon."
+              cursor="not-allowed"
+              color="brand.fg"
+              _hover={{ bg: "transparent" }}
+              _active={{ bg: "transparent" }}
+              _focusVisible={{
+                outline: "2px solid",
+                outlineColor: { base: "brand.500", _dark: "brand.50" },
+                outlineOffset: "2px",
+              }}
+              onClick={(e) => e.preventDefault()}
+            >
+              <Box as="span" display="inline-flex" opacity={0.5} aria-hidden="true">
+                <FaDiscord size={18} />
+              </Box>
+              <Box
+                as="span"
+                position="absolute"
+                right="2px"
+                bottom="2px"
+                display="inline-flex"
+                alignItems="center"
+                justifyContent="center"
+                boxSize="14px"
+                borderRadius="full"
+                bg="brand.solid"
+                color="brand.contrast"
+                aria-hidden="true"
+              >
+                <LuLock size={9} />
+              </Box>
+            </IconButton>
+          )}
 
           {user && (
             <Box
