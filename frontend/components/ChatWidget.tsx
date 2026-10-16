@@ -115,14 +115,15 @@ export default function ChatWidget() {
       right={5}
       zIndex={20}
       w={{ base: "calc(100vw - 32px)", md: "380px" }}
-      h={{ base: "75vh", md: "540px" }}
+      h={{ base: "75dvh", md: "540px" }}
+      maxH="calc(100dvh - 96px)" /* header (~57px) + bottom offset (20px) + gap */
       bg="surface"
       border="1px solid #E5E3DD"
       borderRadius="xl"
       boxShadow="0 12px 40px rgba(0,0,0,0.18)"
       overflow="hidden"
     >
-      <Flex align="center" gap={3} px={4} py={3} bg="brand.500" color="white">
+      <Flex align="center" gap={3} px={4} py={3} bg="brand.500" color="white" flexShrink={0}>
         <Logo size={28} />
         <Box flex={1}>
           <Heading size="sm" color="white">Perchie</Heading>
@@ -133,7 +134,7 @@ export default function ChatWidget() {
         </IconButton>
       </Flex>
 
-      <Box flex={1} overflowY="auto" px={3} py={3} bg="background">
+      <Box flex={1} minH={0} overflowY="auto" px={3} py={3} bg="background">
         <Flex direction="column" gap={3}>
           <Box alignSelf="flex-start" maxW="85%" bg="surface" color="text" border="1px solid #E5E3DD" borderRadius="lg" px={3} py={2}>
             <Text fontSize="sm" whiteSpace="pre-wrap">{GREETING}</Text>
@@ -176,7 +177,7 @@ export default function ChatWidget() {
         </Flex>
       </Box>
 
-      <Flex gap={2} p={3} borderTop="1px solid #E5E3DD" align="flex-end" bg="surface">
+      <Flex gap={2} p={3} borderTop="1px solid #E5E3DD" align="flex-end" bg="surface" flexShrink={0}>
         <Textarea
           placeholder="Ask Perchie…"
           value={input}
