@@ -13,3 +13,7 @@ class JobAlertCreate(BaseModel):
         if v not in ("daily", "weekly"):
             raise ValueError("frequency must be 'daily' or 'weekly'")
         return v
+
+
+class JobAlertUnsubscribe(BaseModel):
+    email: EmailStr
