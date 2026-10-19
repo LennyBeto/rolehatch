@@ -44,6 +44,42 @@ const config = defineConfig({
         },
       },
     },
+    recipes: {
+      // Visible hover / pressed feedback on every button variant, driven by palette tokens
+      button: {
+        base: {
+          transition: "background-color 0.15s ease, border-color 0.15s ease, filter 0.15s ease",
+          _motionReduce: { transition: "none" },
+        },
+        variants: {
+          variant: {
+            // Solid: keep the full colour, then deepen it (lighten in dark mode)
+            solid: {
+              _hover: {
+                bg: "colorPalette.solid",
+                filter: "brightness(0.88)",
+                _dark: { filter: "brightness(1.25)" },
+              },
+              _active: {
+                bg: "colorPalette.solid",
+                filter: "brightness(0.78)",
+                _dark: { filter: "brightness(1.4)" },
+              },
+            },
+            // Outline: clear tint fill and a stronger border
+            outline: {
+              _hover: { bg: "colorPalette.emphasized", borderColor: "colorPalette.solid" },
+              _active: { bg: "colorPalette.emphasized", borderColor: "colorPalette.solid" },
+            },
+            // Ghost: tint fill on hover
+            ghost: {
+              _hover: { bg: "colorPalette.emphasized" },
+              _active: { bg: "colorPalette.emphasized" },
+            },
+          },
+        },
+      },
+    },
   },
   globalCss: {
     "h1, h2, h3": { letterSpacing: "-0.02em" },
