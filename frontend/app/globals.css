@@ -5,6 +5,8 @@
   --background: #F6F5F1;
   --foreground: #1F2A24;
   --ring: #2F4F3F;
+  /* Forest-green wash laid over a button on hover (works on solid, outline and ghost) */
+  --hover-tint: rgba(47, 79, 63, 0.09);
   color-scheme: light;
 }
 
@@ -19,6 +21,7 @@
   --background: #0f1210;
   --foreground: #ededed;
   --ring: #9CC5AE;
+  --hover-tint: rgba(156, 197, 174, 0.14);
   /* Low-opacity white scales with whatever's behind it (background vs surface),
      so it reads as a soft hairline instead of a hard-edged outline. */
   --border-soft: rgba(255, 255, 255, 0.09);
@@ -26,10 +29,11 @@
 }
 
 /* Safety net: keeps every border (including any still hardcoded) soft in dark mode.
-   Once all "#E5E3DD" borders are migrated to {colors.line}, this block can be deleted. */
-html.dark *,
-html.dark *::before,
-html.dark *::after {
+   Once all "#E5E3DD" borders are migrated to {colors.line}, this block can be deleted.
+   Chakra buttons are excluded so their themed hover/outline borders can show. */
+html.dark *:not(.chakra-button),
+html.dark *:not(.chakra-button)::before,
+html.dark *:not(.chakra-button)::after {
   border-color: var(--border-soft) !important;
 }
 
@@ -46,6 +50,15 @@ body {
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+
+/* Button hover feedback: a green wash over any Chakra button, whatever its variant.
+   Inset shadow sits above the background and below the label, and leaves outlines alone. */
+.chakra-button {
+  transition: box-shadow 0.15s ease;
+}
+.chakra-button:hover:not(:disabled):not([aria-disabled="true"]):not([data-disabled]) {
+  box-shadow: inset 0 0 0 999px var(--hover-tint);
 }
 
 ::selection {
