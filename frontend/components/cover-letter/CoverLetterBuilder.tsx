@@ -8,7 +8,7 @@ import { LuArrowLeft } from "react-icons/lu";
 import { useAuth } from "@/lib/AuthContext";
 import { getApplicantProfile, ApplicantProfile } from "@/lib/api";
 import { useDocDownload } from "@/lib/useDocDownload"; // NEW (docs paywall)
-import { printDocument, downloadTextFile } from "@/lib/docActions"; // NEW (docs paywall)
+import { printDocument, copyText, downloadTextFile } from "@/lib/docActions"; // NEW (docs paywall)
 import CoverLetterPreview from "./CoverLetterPreview";
 import {
   COVER_LETTER_TEMPLATES, CoverLetterData, DEFAULT_TEMPLATE_ID, EMPTY_COVER_LETTER,
@@ -30,61 +30,6 @@ const PRINT_CSS = `
 
 function todayString() {
   return new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
-}
-
-// Starts a clipboard write synchronously (inside the click gesture, so the browser allows it)
-// but lets the text arrive later, after the download credit has been authorized.
-// Returns null when the browser has no ClipboardItem support.
-function beginClipboardWrite() {
-  if (typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) return null;
-  let resolveBlob!: (blob: Blob) => void;
-  let rejectBlob!: (reason?: unknown) => void;
-  const blobPromise = new Promise<Blob>((resolve, reject) => {
-    resolveBlob = resolve;
-    rejectBlob = reject;
-  });
-  blobPromise.catch(() => {}); // a cancelled write is expected, not an error
-  try {
-    const done = navigator.clipboard
-      .write([new ClipboardItem({ "text/plain": blobPromise })])
-      .then(() => true, () => false);
-    return {
-      done,
-      approve: (text: string) => resolveBlob(new Blob([text], { type: "text/plain" })),
-      cancel: () => rejectBlob(new Error("cancelled")), // no-op once approved
-    };
-  } catch {
-    return null;
-  }
-}
-
-// Legacy fallback: hidden textarea + execCommand (older browsers, blocked Clipboard API).
-async function copyWithFallback(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    /* fall through to the legacy path */
-  }
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.setAttribute("readonly", "");
-    ta.setAttribute("aria-hidden", "true");
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    ta.style.pointerEvents = "none";
-    document.body.appendChild(ta);
-    ta.select();
-    ta.setSelectionRange(0, text.length);
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -176,38 +121,13 @@ export default function CoverLetterBuilder() {
     router.replace(`/applicant/cover-letter-builder?template=${id}`, { scroll: false });
   };
 
-  // CHANGED (docs paywall): every download button spends one cover-letter download first,
-  // runs the action, then returns the applicant to the dashboard. Locked -> paywall dialog.
+  // Every download button spends one cover-letter download first (run hands each action an
+  // `authorized` promise), runs the action, then returns the applicant to the dashboard.
+  // Locked -> paywall dialog. Action failed -> credit refunded.
   const handlePrint = () => run((authorized) => printDocument(authorized), null);
 
-  // CHANGED: the clipboard write starts inside the click gesture, the text is only handed over
-  // once the download is authorized, and success is reported only if the clipboard really
-  // received it. The credit is refunded (by run) if the copy fails.
-  const handleCopy = () => {
-    const text = toPlainText(data);
-    const gesture = beginClipboardWrite();
-
-    return Promise.resolve(
-      run(
-        async (authorized) => {
-          if (!authorized) {
-            gesture?.cancel(); // locked: nothing is copied, paywall dialog handles the rest
-            return false;
-          }
-          let ok = false;
-          if (gesture) {
-            gesture.approve(text);
-            ok = await gesture.done;
-          }
-          if (!ok) ok = await copyWithFallback(text);
-          if (ok) router.push("/applicant/dashboard");
-          return ok;
-        },
-        "Copied as plain text",
-        "Couldn't copy",
-      ),
-    ).finally(() => gesture?.cancel()); // never leave a pending clipboard write hanging
-  };
+  const handleCopy = () =>
+    run((authorized) => copyText(toPlainText(data), authorized), "Copied as plain text", "Couldn't copy");
 
   const handleDownloadTxt = () => {
     const filename = `${(data.fullName || "cover-letter").trim().replace(/\s+/g, "-").toLowerCase()}-cover-letter.txt`;

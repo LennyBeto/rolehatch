@@ -7,12 +7,17 @@ import {
   consumeDocCredit, getDocQuota, refundDocCredit, startDocCheckout,
   type DocKind, type DocQuota,
 } from "@/lib/api";
+import type { Authorized } from "@/lib/docActions";
 import { toaster } from "@/components/ui/toaster";
 
 const DASHBOARD_PATH = "/applicant/dashboard";
 const POLL_INTERVAL_MS = 3000;
 const POLL_MAX_MS = 10 * 60 * 1000;
 const KIND_LABEL: Record<DocKind, string> = { cv: "CV", cover_letter: "cover letter" };
+
+// Why the `authorized` promise rejected, so run() can react correctly
+class LockedError extends Error {}
+class ConsumeError extends Error {}
 
 export function useDocDownload(kind: DocKind) {
   const router = useRouter();
@@ -65,38 +70,70 @@ export function useDocDownload(kind: DocKind) {
 
   /**
    * Spend one download, run the browser action, then go back to the dashboard.
+   *
+   * The action is started immediately (still inside the user's click, which browsers need for
+   * clipboard access) and receives an `authorized` promise that resolves once the server has
+   * spent the download. Actions must await it before handing the document to the user.
+   *
    * Locked -> paywall dialog (no redirect). Action failed -> credit refunded, stay on the page.
+   * Pass `successTitle = null` to skip the success toast.
    */
   const run = useCallback(
-    async (action: () => void | Promise<void>, successTitle = "Download complete") => {
+    async (
+      action: (authorized: Authorized) => void | Promise<void>,
+      successTitle: string | null = "Download complete",
+      errorTitle = "That didn't work"
+    ) => {
       if (workingRef.current) return;
       workingRef.current = true;
       setWorking(true);
 
-      let consumptionId: string;
-      try {
-        const res = await consumeDocCredit(kind);
+      const spent: { id?: string } = {};
+
+      // No `await` before this point: the action must start inside the click gesture.
+      const authorized: Authorized = (async () => {
+        let res: Response;
+        try {
+          res = await consumeDocCredit(kind);
+        } catch {
+          throw new ConsumeError("consume failed");
+        }
         if (res.status === 402) {
           await refreshQuota();
           setPaywallOpen(true);
+          throw new LockedError("locked");
+        }
+        if (!res.ok) throw new ConsumeError("consume failed");
+        try {
+          const data: { consumption_id: string } = await res.json();
+          spent.id = data.consumption_id;
+        } catch {
+          throw new ConsumeError("consume failed");
+        }
+      })();
+      authorized.catch(() => {}); // handled below; avoids an unhandled-rejection warning
+
+      try {
+        await action(authorized);
+        await authorized; // an action that never awaited it must still be authorized
+      } catch (err) {
+        // Prefer the real reason the credit check failed over whatever the action threw
+        const reason = await authorized.then(() => null, (e: unknown) => e);
+
+        if (reason instanceof LockedError) {
+          release(); // paywall dialog is already open
+          return;
+        }
+        if (reason instanceof ConsumeError) {
+          toaster.create({ title: "Couldn't check your downloads", description: "Please try again.", type: "error" });
           release();
           return;
         }
-        if (!res.ok) throw new Error("consume failed");
-        const data: { consumption_id: string } = await res.json();
-        consumptionId = data.consumption_id;
-      } catch {
-        toaster.create({ title: "Couldn't check your downloads", description: "Please try again.", type: "error" });
-        release();
-        return;
-      }
 
-      try {
-        await action();
-      } catch {
-        refundDocCredit(consumptionId).catch(() => {});
+        // Credit was spent but the action itself failed: give it back
+        if (spent.id) refundDocCredit(spent.id).catch(() => {});
         toaster.create({
-          title: "That didn't work",
+          title: errorTitle,
           description: "Your download was not used. Please try again.",
           type: "error",
         });
@@ -105,7 +142,7 @@ export function useDocDownload(kind: DocKind) {
         return;
       }
 
-      toaster.create({ title: successTitle, type: "success" });
+      if (successTitle) toaster.create({ title: successTitle, type: "success" });
       router.push(DASHBOARD_PATH);
     },
     [kind, refreshQuota, release, router]
