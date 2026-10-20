@@ -1,56 +1,66 @@
 // frontend/components/EditJobDialog.tsx
 "use client";
 import {
-  Dialog, Input, Textarea, Button, Stack, Select, Portal, CloseButton,
-  createListCollection,
+  Dialog, Input, Textarea, Button, Stack, NativeSelect, Portal, CloseButton, HStack,
 } from "@chakra-ui/react";
-import { useState } from "react";
-import { updateEmployerJob } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { updateJob } from "@/lib/api";
 import { toaster } from "@/components/ui/toaster";
-import type { EmployerJob } from "@/lib/types";
 
-const REMOTE_TYPES = createListCollection({
-  items: [
-    { label: "Remote", value: "remote" },
-    { label: "Hybrid", value: "hybrid" },
-    { label: "Onsite", value: "onsite" },
-    { label: "Field", value: "field" },
-  ],
-});
-
-const COMMITMENTS = createListCollection({
-  items: [
-    { label: "Full-time", value: "full_time" },
-    { label: "Part-time", value: "part_time" },
-    { label: "Contract", value: "contract" },
-  ],
-});
+export type EmployerJob = {
+  id: string;
+  title: string;
+  source: string;
+  editable: boolean;
+  location: string | null;
+  remote_type: string | null;
+  commitment: string | null;
+  salary_min: number | null;
+  salary_max: number | null;
+  description: string | null;
+  apply_url: string;
+  is_featured: boolean;
+  featured_until: string | null;
+};
 
 type Props = {
   job: EmployerJob | null;
   onClose: () => void;
-  onSaved: (updated: EmployerJob) => void;
+  onSaved: (job: EmployerJob) => void;
 };
 
-function EditForm({ job, onClose, onSaved }: { job: EmployerJob } & Omit<Props, "job">) {
-  const [title, setTitle] = useState(job.title);
-  const [location, setLocation] = useState(job.location ?? "");
-  const [remoteType, setRemoteType] = useState<string[]>(job.remote_type ? [job.remote_type] : []);
-  const [commitment, setCommitment] = useState<string[]>(job.commitment ? [job.commitment] : []);
-  const [salaryMin, setSalaryMin] = useState(job.salary_min?.toString() ?? "");
-  const [salaryMax, setSalaryMax] = useState(job.salary_max?.toString() ?? "");
-  const [description, setDescription] = useState(job.description ?? "");
-  const [applyUrl, setApplyUrl] = useState(job.source_url);
+export default function EditJobDialog({ job, onClose, onSaved }: Props) {
+  const [title, setTitle] = useState("");
+  const [location, setLocation] = useState("");
+  const [remoteType, setRemoteType] = useState("");
+  const [commitment, setCommitment] = useState("");
+  const [salaryMin, setSalaryMin] = useState("");
+  const [salaryMax, setSalaryMax] = useState("");
+  const [applyUrl, setApplyUrl] = useState("");
+  const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (!job) return;
+    setTitle(job.title);
+    setLocation(job.location ?? "");
+    setRemoteType(job.remote_type ?? "");
+    setCommitment(job.commitment ?? "");
+    setSalaryMin(job.salary_min != null ? String(job.salary_min) : "");
+    setSalaryMax(job.salary_max != null ? String(job.salary_max) : "");
+    setApplyUrl(job.apply_url);
+    setDescription(job.description ?? "");
+  }, [job]);
+
   const handleSave = async () => {
+    if (!job) return;
     setSaving(true);
     try {
-      const res = await updateEmployerJob(job.id, {
+      const res = await updateJob(job.id, {
         title,
         location: location || null,
-        remote_type: remoteType[0] || null,
-        commitment: commitment[0] || null,
+        remote_type: remoteType || null,
+        commitment: commitment || null,
         salary_min: salaryMin ? Number(salaryMin) : null,
         salary_max: salaryMax ? Number(salaryMax) : null,
         description: description || null,
@@ -60,9 +70,10 @@ function EditForm({ job, onClose, onSaved }: { job: EmployerJob } & Omit<Props, 
         const err = await res.json().catch(() => null);
         throw new Error(err?.detail?.[0]?.msg || err?.detail || "Failed to update listing");
       }
-      const updated: EmployerJob = await res.json();
+      const data = await res.json();
       toaster.create({ title: "Listing updated", type: "success" });
-      onSaved(updated);
+      onSaved(data.job);
+      onClose();
     } catch (err) {
       toaster.create({
         title: "Couldn't update listing",
@@ -75,71 +86,57 @@ function EditForm({ job, onClose, onSaved }: { job: EmployerJob } & Omit<Props, 
   };
 
   return (
-    <Dialog.Content>
-      <Dialog.Header>Edit listing</Dialog.Header>
-      <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
-      <Dialog.Body>
-        <Stack gap={3}>
-          <Input placeholder="Job title" value={title} onChange={(e) => setTitle(e.target.value)} required />
-          <Input placeholder="Location" value={location} onChange={(e) => setLocation(e.target.value)} />
-
-          <Select.Root collection={REMOTE_TYPES} value={remoteType} onValueChange={(e) => setRemoteType(e.value)}>
-            <Select.Control>
-              <Select.Trigger><Select.ValueText placeholder="Work environment" /></Select.Trigger>
-            </Select.Control>
-            <Portal>
-              <Select.Positioner>
-                <Select.Content>
-                  {REMOTE_TYPES.items.map((item) => (
-                    <Select.Item key={item.value} item={item}>{item.label}</Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Positioner>
-            </Portal>
-          </Select.Root>
-
-          <Select.Root collection={COMMITMENTS} value={commitment} onValueChange={(e) => setCommitment(e.value)}>
-            <Select.Control>
-              <Select.Trigger><Select.ValueText placeholder="Commitment type" /></Select.Trigger>
-            </Select.Control>
-            <Portal>
-              <Select.Positioner>
-                <Select.Content>
-                  {COMMITMENTS.items.map((item) => (
-                    <Select.Item key={item.value} item={item}>{item.label}</Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Positioner>
-            </Portal>
-          </Select.Root>
-
-          <Stack direction="row" gap={3}>
-            <Input placeholder="Min salary ($k)" type="number" value={salaryMin} onChange={(e) => setSalaryMin(e.target.value)} />
-            <Input placeholder="Max salary ($k)" type="number" value={salaryMax} onChange={(e) => setSalaryMax(e.target.value)} />
-          </Stack>
-
-          <Input placeholder="Application URL" type="url" value={applyUrl} onChange={(e) => setApplyUrl(e.target.value)} required />
-          <Textarea placeholder="Description (optional)" rows={6} value={description} onChange={(e) => setDescription(e.target.value)} />
-        </Stack>
-      </Dialog.Body>
-      <Dialog.Footer>
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button colorPalette="brand" loading={saving} onClick={handleSave} disabled={!title || !applyUrl}>
-          Save changes
-        </Button>
-      </Dialog.Footer>
-    </Dialog.Content>
-  );
-}
-
-export default function EditJobDialog({ job, onClose, onSaved }: Props) {
-  return (
     <Dialog.Root open={!!job} onOpenChange={(e) => !e.open && onClose()} placement="center" scrollBehavior="inside">
       <Portal>
         <Dialog.Backdrop />
         <Dialog.Positioner>
-          {/* key remounts the form with fresh state for each job */}
-          {job && <EditForm key={job.id} job={job} onClose={onClose} onSaved={onSaved} />}
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>Edit listing</Dialog.Title>
+            </Dialog.Header>
+            <Dialog.CloseTrigger asChild><CloseButton size="sm" /></Dialog.CloseTrigger>
+            <Dialog.Body>
+              <Stack gap={3}>
+                <Input placeholder="Job title" value={title} onChange={(e) => setTitle(e.target.value)} />
+                <Input placeholder="Location" value={location} onChange={(e) => setLocation(e.target.value)} />
+
+                <NativeSelect.Root>
+                  <NativeSelect.Field value={remoteType} onChange={(e) => setRemoteType(e.target.value)}>
+                    <option value="">Work environment</option>
+                    <option value="remote">Remote</option>
+                    <option value="hybrid">Hybrid</option>
+                    <option value="onsite">Onsite</option>
+                    <option value="field">Field</option>
+                  </NativeSelect.Field>
+                  <NativeSelect.Indicator />
+                </NativeSelect.Root>
+
+                <NativeSelect.Root>
+                  <NativeSelect.Field value={commitment} onChange={(e) => setCommitment(e.target.value)}>
+                    <option value="">Commitment type</option>
+                    <option value="full_time">Full-time</option>
+                    <option value="part_time">Part-time</option>
+                    <option value="contract">Contract</option>
+                  </NativeSelect.Field>
+                  <NativeSelect.Indicator />
+                </NativeSelect.Root>
+
+                <HStack gap={3}>
+                  <Input placeholder="Min salary ($k)" type="number" value={salaryMin} onChange={(e) => setSalaryMin(e.target.value)} />
+                  <Input placeholder="Max salary ($k)" type="number" value={salaryMax} onChange={(e) => setSalaryMax(e.target.value)} />
+                </HStack>
+
+                <Input placeholder="Application URL" type="url" value={applyUrl} onChange={(e) => setApplyUrl(e.target.value)} />
+                <Textarea placeholder="Description (optional)" rows={5} value={description} onChange={(e) => setDescription(e.target.value)} />
+              </Stack>
+            </Dialog.Body>
+            <Dialog.Footer>
+              <Button variant="ghost" onClick={onClose}>Cancel</Button>
+              <Button colorPalette="brand" onClick={handleSave} loading={saving} disabled={!title.trim() || !applyUrl.trim()}>
+                Save changes
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
         </Dialog.Positioner>
       </Portal>
     </Dialog.Root>
