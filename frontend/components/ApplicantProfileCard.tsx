@@ -28,11 +28,17 @@ const EXPERTISE_COLLECTION = createListCollection({
 });
 
 // NEW: expertise is stored as the option value (e.g. "backend_engineer"); this turns it into its display label.
-// Falls back to the raw value for anything not in the list.
+// Falls back to the raw value for anything not in the list (this is how a custom "Other" expertise is shown).
 export function expertiseLabel(value: string | null | undefined) {
   if (!value) return "";
   return EXPERTISE_COLLECTION.items.find((item) => item.value === value)?.label ?? value;
 }
+
+// NEW (other): true when a value is one of the predefined options
+const isListedExpertise = (value: string | undefined) =>
+  !!value && EXPERTISE_COLLECTION.items.some((item) => item.value === value);
+
+const OTHER_MAX_LENGTH = 60; // NEW (other)
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
 const ALLOWED_AVATAR_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -65,6 +71,16 @@ export default function ApplicantProfileCard({
   const [editing, setEditing] = useState(() => !(fullName.trim() && expertise[0]));
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // NEW (other): a saved value that isn't in the list is a custom expertise, so reopen it as "Other" with the text filled in
+  const [otherSelected, setOtherSelected] = useState(
+    () => expertise[0] === "other" || (!!expertise[0] && !isListedExpertise(expertise[0]))
+  );
+  const [customExpertise, setCustomExpertise] = useState(
+    () => (expertise[0] && !isListedExpertise(expertise[0]) ? expertise[0] : "")
+  );
+  const [showOtherError, setShowOtherError] = useState(false);
+  const otherInputRef = useRef<HTMLInputElement>(null);
+
   // NEW (collapse): report edit mode (also fires on mount) so the Profile Summary card can reappear while editing
   useEffect(() => {
     onEditingChange?.(editing);
@@ -73,7 +89,35 @@ export default function ApplicantProfileCard({
   const selectedAvatar = getAvatarById(avatarId);
   const displayUrl = previewUrl ?? avatarUrl;
 
+  // NEW (other): dropdown change. "Other" reveals the text input; any listed option clears it.
+  const handleExpertiseSelect = (value: string[]) => {
+    if (value[0] === "other") {
+      setOtherSelected(true);
+      setShowOtherError(false);
+      onExpertiseChange(customExpertise.trim() ? [customExpertise.trim()] : ["other"]);
+      setTimeout(() => otherInputRef.current?.focus(), 0);
+      return;
+    }
+    setOtherSelected(false);
+    setCustomExpertise("");
+    setShowOtherError(false);
+    onExpertiseChange(value);
+  };
+
+  // NEW (other): the typed text becomes the stored expertise; an empty field falls back to the "other" placeholder
+  const handleCustomExpertiseChange = (text: string) => {
+    setCustomExpertise(text);
+    if (text.trim()) setShowOtherError(false);
+    onExpertiseChange(text.trim() ? [text.trim()] : ["other"]);
+  };
+
   const handleSave = async () => {
+    // NEW (other): "Other" needs a specific expertise before saving
+    if (otherSelected && !customExpertise.trim()) {
+      setShowOtherError(true);
+      otherInputRef.current?.focus();
+      return;
+    }
     setSaving(true);
     try {
       const res = await updateApplicantProfile({
@@ -272,8 +316,8 @@ export default function ApplicantProfileCard({
           <Text fontSize="sm" fontWeight="600" mb={1}>Expertise</Text>
           <Select.Root
             collection={EXPERTISE_COLLECTION}
-            value={expertise}
-            onValueChange={(e) => onExpertiseChange(e.value)}
+            value={otherSelected ? ["other"] : expertise} // CHANGED (other): stays on "Other" while a custom value is typed
+            onValueChange={(e) => handleExpertiseSelect(e.value)}
           >
             <Select.Control>
               <Select.Trigger><Select.ValueText placeholder="Select your expertise" /></Select.Trigger>
@@ -288,6 +332,33 @@ export default function ApplicantProfileCard({
               </Select.Positioner>
             </Portal>
           </Select.Root>
+
+          {/* NEW (other): specify the exact expertise when "Other" is selected */}
+          {otherSelected && (
+            <Box mt={3}>
+              <Text fontSize="sm" fontWeight="600" mb={1}>Specify your expertise</Text>
+              <Input
+                ref={otherInputRef}
+                colorPalette="brand"
+                placeholder="e.g. Cloud Security Engineer"
+                value={customExpertise}
+                maxLength={OTHER_MAX_LENGTH}
+                aria-label="Specify your expertise"
+                aria-invalid={showOtherError} // CHANGED (fix): Chakra v3 Input has no `invalid` prop; aria-invalid drives its error styling
+                data-invalid={showOtherError ? "" : undefined}
+                onChange={(e) => handleCustomExpertiseChange(e.target.value)}
+              />
+              {showOtherError ? (
+                <Text fontSize="xs" color="fg.error" mt={1}>
+                  Please enter your expertise to continue.
+                </Text>
+              ) : (
+                <Text fontSize="xs" color="gray.500" mt={1}>
+                  {customExpertise.length}/{OTHER_MAX_LENGTH}
+                </Text>
+              )}
+            </Box>
+          )}
         </Box>
 
         <Button colorPalette="brand" onClick={handleSave} loading={saving} alignSelf="flex-start">
