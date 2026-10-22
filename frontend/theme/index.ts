@@ -3,6 +3,18 @@ import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
 
 const config = defineConfig({
   theme: {
+    // Loading UI: one slow shimmer sweep + an indeterminate top progress bar.
+    // Consumers must also set _motionReduce to stop these (see components/ui/shimmer.tsx, RouteProgress.tsx).
+    keyframes: {
+      shimmer: {
+        from: { backgroundPosition: "200% 0" },
+        to: { backgroundPosition: "-200% 0" },
+      },
+      progressSlide: {
+        "0%": { transform: "translateX(-100%)" },
+        "100%": { transform: "translateX(350%)" },
+      },
+    },
     tokens: {
       colors: {
         // Forest green ramp. 50/500/600/700 are the original brand values.
@@ -31,6 +43,11 @@ const config = defineConfig({
         text: { value: { base: "#1F2A24", _dark: "#EDEDED" } },
         // Hairline border color: warm gray in light, soft white hairline in dark
         line: { value: { base: "#E5E3DD", _dark: "rgba(255, 255, 255, 0.09)" } },
+        // Loading placeholders: base fill + the lighter band that sweeps across it
+        skeleton: {
+          base: { value: { base: "{colors.brand.50}", _dark: "rgba(156, 197, 174, 0.10)" } },
+          shine: { value: { base: "#FFFFFF", _dark: "rgba(156, 197, 174, 0.18)" } },
+        },
         brand: {
           solid: { value: "{colors.brand.500}" },
           contrast: { value: "white" },
