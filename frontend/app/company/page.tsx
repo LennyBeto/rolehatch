@@ -1,8 +1,9 @@
 // frontend/app/company/page.tsx
 "use client";
-import { Box, Heading, Text, Stack, SimpleGrid, Center, Spinner, Icon } from "@chakra-ui/react";
+import { Box, Heading, Text, Stack, SimpleGrid, Center, Icon, Flex, VisuallyHidden } from "@chakra-ui/react";
 import { LuTarget, LuHeart, LuRefreshCw } from "react-icons/lu";
 import { useEffect, useState } from "react";
+import Shimmer from "@/components/ui/shimmer";
 
 type Stats = { total_jobs: number; total_companies: number };
 
@@ -51,7 +52,8 @@ export default function CompanyPage() {
               bg="surface"
               p={5}
               borderRadius="lg"
-              border="1px solid #E5E3DD"
+              border="1px solid"
+              borderColor="line"
               transition="box-shadow 0.15s ease"
               _hover={{ boxShadow: "0 4px 16px rgba(0,0,0,0.06)" }}
             >
@@ -75,12 +77,31 @@ export default function CompanyPage() {
         </Stack>
 
         {loading ? (
-          <Center py={10}><Spinner size="sm" color="brand.500" /></Center>
+          <SimpleGrid columns={2} gap={4} mt={10} role="status" aria-busy="true">
+            <VisuallyHidden>Loading platform stats</VisuallyHidden>
+            {[0, 1].map((i) => (
+              <Flex
+                key={i}
+                direction="column"
+                align="center"
+                gap={2}
+                bg="surface"
+                border="1px solid"
+                borderColor="line"
+                borderRadius="lg"
+                py={8}
+              >
+                <Shimmer h="40px" w="96px" maxW="70%" />
+                <Shimmer h="14px" w="72px" maxW="60%" />
+              </Flex>
+            ))}
+          </SimpleGrid>
         ) : stats ? (
           <SimpleGrid columns={2} gap={4} mt={10}>
             <Box
               bg="surface"
-              border="1px solid #E5E3DD"
+              border="1px solid"
+              borderColor="line"
               borderRadius="lg"
               py={8}
               textAlign="center"
@@ -90,7 +111,8 @@ export default function CompanyPage() {
             </Box>
             <Box
               bg="surface"
-              border="1px solid #E5E3DD"
+              border="1px solid"
+              borderColor="line"
               borderRadius="lg"
               py={8}
               textAlign="center"
