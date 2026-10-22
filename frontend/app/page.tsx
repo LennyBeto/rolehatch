@@ -9,13 +9,14 @@ import MobileFilters from "@/components/MobileFilters";
 import JobList from "@/components/JobList";
 import JobAlertForm from "@/components/JobAlertForm";
 import EmployerPricingPreview from "@/components/EmployerPricingPreview";
+import HomeSkeleton from "@/components/HomeSkeleton";
 
 export default function HomePage() {
   return (
     // overflowX="clip" (not "hidden"): hidden turns this Box into a scroll container,
     // which breaks position: sticky on descendants. clip blocks horizontal overflow without that side effect.
     <Box bg="background" minH="100vh" overflowX="clip">
-      <Suspense fallback={<Box minH="200px" />}>
+      <Suspense fallback={<HomeSkeleton />}>
         <HeroSection />
         <SocialProof />
         <Box maxW="1200px" mx="auto" px={4} pt={6}>
