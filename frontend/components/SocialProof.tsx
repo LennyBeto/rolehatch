@@ -1,7 +1,8 @@
 // frontend/components/SocialProof.tsx
 "use client";
-import { Box, Text, HStack, Image, Center, Spinner } from "@chakra-ui/react";
+import { Box, Text, HStack, Image, Flex, VisuallyHidden } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
+import Shimmer from "@/components/ui/shimmer";
 
 type Company = { name: string; domain: string | null };
 type Stats = { total_jobs: number; total_companies: number };
@@ -58,13 +59,35 @@ export default function SocialProof() {
 
   const visibleCompanies = companies.filter((c) => c.domain && !failedLogos.has(c.name));
 
-  if (loading) return <Center py={8}><Spinner size="sm" color="brand.500" /></Center>;
+  if (loading) {
+    return (
+      <Box
+        py={8}
+        borderTop="1px solid"
+        borderBottom="1px solid"
+        borderColor="line"
+        bg="surface"
+        role="status"
+        aria-busy="true"
+      >
+        <VisuallyHidden>Loading companies</VisuallyHidden>
+        <Flex justify="center" mb={4}>
+          <Shimmer h="14px" w="240px" maxW="70%" />
+        </Flex>
+        <HStack justify="center" gap={8} flexWrap="wrap" px={4}>
+          {[...Array(8)].map((_, i) => (
+            <Shimmer key={i} boxSize="32px" />
+          ))}
+        </HStack>
+      </Box>
+    );
+  }
 
   // Hide the section only if BOTH stats and logos are unavailable.
   if (!stats && visibleCompanies.length === 0) return null;
 
   return (
-    <Box py={8} borderTop="1px solid #E5E3DD" borderBottom="1px solid #E5E3DD" bg="surface">
+    <Box py={8} borderTop="1px solid" borderBottom="1px solid" borderColor="line" bg="surface">
       {stats && (
         <Text
           textAlign="center"
