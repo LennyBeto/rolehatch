@@ -9,8 +9,7 @@ from uuid import UUID
 from anyio import from_thread
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from app.core.limiter import limiter
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -24,7 +23,6 @@ from app.services import mpesa, bachs, paypal, paystack, ats_quota, doc_quota
 
 logger = logging.getLogger("perchrole.wallet")
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 
 ACK = {"ResultCode": 0, "ResultDesc": "Accepted"}
 
