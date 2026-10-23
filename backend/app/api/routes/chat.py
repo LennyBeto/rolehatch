@@ -1,15 +1,13 @@
 # backend/app/api/routes/chat.py
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from app.core.limiter import limiter
 
 from app.db.session import get_db
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.chatbot import ask_perchie
 
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("", response_model=ChatResponse)
