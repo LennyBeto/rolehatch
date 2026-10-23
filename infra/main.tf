@@ -51,12 +51,8 @@ resource "google_secret_manager_secret" "secrets" {
     "database-url", "supabase-jwt-secret", "upstash-token",
     "scheduler-secret",
     "paystack-secret-key",
-    "paypal-client-id", "paypal-client-secret",
     "revalidate-secret", # used by the post-sync frontend revalidation in internal.py
     "gemini-api-key",    # Perchie chatbot (Google AI Studio)
-    # Legacy Stripe secrets, no longer mounted by cloudbuild.yaml. Kept so Terraform doesn't
-    # destroy them; delete these two lines once you've confirmed nothing reads them.
-    "stripe-secret-key", "stripe-webhook-secret",
     # "anthropic-api-key", # Previous Perchie provider (Anthropic), uncomment to switch back
   ])
   secret_id = each.key
