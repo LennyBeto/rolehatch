@@ -1,0 +1,41 @@
+# .gcloudignore
+.git
+.gitignore
+
+# Frontend deploys via Vercel, not Cloud Build
+frontend/
+
+# Python envs and caches
+.venv*
+venv/
+env/
+**/.venv*
+**/venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+
+# Secrets: never upload or bake into the image
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+.env.gcloud
+**/.env.gcloud
+*.pem
+*.key
+
+# Terraform state and vars (state contains scheduler_secret in plain text)
+.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# Misc
+node_modules/
+**/node_modules/
+*.log
+.DS_Store
+docs/

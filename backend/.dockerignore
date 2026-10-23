@@ -1,0 +1,32 @@
+# backend/.dockerignore
+# Patterns are relative to the build context root, so secrets use **/ to catch nested copies too.
+
+# Secrets: never bake into the image
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+.env.gcloud
+**/.env.gcloud
+*.pem
+*.key
+
+# Terraform artifacts, if any end up under backend/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# Python envs and caches
+.venv*
+venv/
+env/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+
+# Misc
+.git
+*.log
+seed_data/*.csv.bak
