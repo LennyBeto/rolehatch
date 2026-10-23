@@ -62,9 +62,10 @@ PerchRole solves the two-sided problem every job board has: job seekers want fre
 | Database | PostgreSQL (via Supabase), SQLAlchemy ORM, Alembic migrations |
 | Auth | Supabase Auth (magic link / OTP) |
 | Cache | Upstash Redis (serverless, REST-based) |
-| Payments | Paystack (checkout + webhooks); wallet via M-Pesa, Paystack, PayPal, Bachs |
+| Payments | Paystack (checkout + webhooks); wallet via M-Pesa, Paystack, Bachs |
 | AI | Google AI Studio (Gemini), powering Perchie |
 | Hosting | Vercel (frontend), Google Cloud Run (backend) |
+| DNS / CDN | Cloudflare |
 | CI/CD | Google Cloud Build |
 | Infra as Code | Terraform |
 | Scheduling | Google Cloud Scheduler |
@@ -117,6 +118,7 @@ rolehatch/
 ├── EVIDENCE.md              # Chronological proof-of-build log
 ├── BUILDLOG.md              # Phase-by-phase progress tracker
 ├── docker-compose.yml       # Local dev orchestration
+├── .gcloudignore            # Keeps secrets/state out of Cloud Build uploads
 ├── frontend/                # Next.js app
 │   ├── app/                 # Routes: /, /auth/callback, /dashboard, /post-job,
 │   │                        #   /promote/[jobId], /applicant/dashboard,
@@ -129,7 +131,7 @@ rolehatch/
 │   └── public/logo.svg
 ├── backend/                 # FastAPI app
 │   ├── app/
-│   │   ├── core/            # config, security (JWT), cache (Redis)
+│   │   ├── core/            # config, security (JWT), cache (Redis), limiter (rate limits)
 │   │   ├── db/              # SQLAlchemy session/base
 │   │   ├── models/          # Company, Job, SavedJob, JobAlert, ContactMessage
 │   │   ├── schemas/         # Pydantic request/response models
@@ -140,10 +142,11 @@ rolehatch/
 │   │       ├── scrapers/    # greenhouse, lever, workday, bamboohr
 │   │       └── chatbot      # Perchie service (Gemini)
 │   ├── alembic/             # DB migrations
+│   ├── .dockerignore
 │   └── Dockerfile
 └── infra/
     ├── cloudbuild.yaml      # CI/CD pipeline
-    └── main.tf              # Terraform: Artifact Registry, secrets, scheduler
+    └── main.tf              # Terraform: Artifact Registry, secrets, schedulers, IAM
 ```
 
 ---
@@ -182,6 +185,8 @@ cd ..
 
 ## Environment Variables
 
+The full list, including M-Pesa, Bachs and Discord, lives in `backend/.env.example`. Core values:
+
 ### `backend/.env`
 
 ```dotenv
@@ -212,6 +217,7 @@ GEMINI_API_KEY=your-google-ai-studio-key
 ALLOWED_ORIGINS=http://localhost:3000
 
 # ── DB pool / workers (tune for load) ─────────────────────
+# Local defaults. Production runs 3 / 2 / 2 (see Deployment).
 DB_POOL_SIZE=10
 DB_MAX_OVERFLOW=20
 DB_POOL_TIMEOUT=30
@@ -333,7 +339,7 @@ Perchie is the site-wide assistant, mounted as a chat widget. It answers questio
 
 ## Payments & Monetization
 
-All payments are processed through **Paystack** (replacing the earlier Stripe integration).
+Card and mobile-money checkout for promoted listings and paywalled features runs through **Paystack**.
 
 **Promoted listings:** employers pay to pin a listing to the top of search results for 14 days ($49 default, configurable).
 
@@ -348,7 +354,6 @@ All payments are processed through **Paystack** (replacing the earlier Stripe in
 |---|---|
 | M-Pesa | Live |
 | Paystack | Live |
-| PayPal | Added as its own card |
 | Bachs (bachs.io) | Added as its own card |
 | Payoneer | Planned |
 | Wise | Planned |
@@ -383,45 +388,56 @@ PerchRole Tech Hub is the project's Discord server, embedded on the site. Tech j
 
 - Redis caching on search, job detail, facets and stats keeps hot paths off Postgres
 - Search selects only the columns it returns instead of hydrating full ORM objects
-- Tunable SQLAlchemy pool (`DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DB_POOL_TIMEOUT`) and Uvicorn workers (`WEB_CONCURRENCY`)
+- Tunable SQLAlchemy pool (`DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DB_POOL_TIMEOUT`) and Uvicorn workers (`WEB_CONCURRENCY`). Production runs `3 / 2 / 2`, so the worst case is 10 instances × 2 workers × 5 = 100 database connections
 - Cloud Run autoscaling (`--max-instances`) for peak load; raise `--min-instances` above 0 to avoid cold starts
 - GZip responses; indexed filters (`pg_trgm` title index, location, remote type, salary)
-- Rate limiting via SlowAPI on public write endpoints (job alerts, contact, employer postings). Note: the default in-memory limiter is per instance; point it at Redis for limits shared across Cloud Run instances
+- Rate limiting via SlowAPI on public write endpoints, using one shared limiter (`app/core/limiter.py`) keyed on the real client IP: `CF-Connecting-IP` is trusted only when the connecting peer is a Cloudflare edge address, otherwise the last `X-Forwarded-For` entry is used. The default in-memory storage is per instance; point it at Redis for limits shared across Cloud Run instances
 
 ---
 
 ## Deployment
 
+Production topology: **Cloudflare** (DNS/SSL, Full strict) → **Vercel** (`perchrole.com`) and **Cloud Run** (`api.perchrole.com`).
+
 ### Backend → Google Cloud Run
 
+Deploys run through Cloud Build (`infra/cloudbuild.yaml`): build → push → migrate → deploy. Run it manually with:
+
 ```bash
-gcloud run deploy rolehatch-api \
-  --source ./backend \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --min-instances=0 \
-  --set-secrets="DATABASE_URL=database-url:latest,SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,UPSTASH_REDIS_TOKEN=upstash-token:latest,SCHEDULER_SECRET=scheduler-secret:latest,PAYSTACK_SECRET_KEY=paystack-secret-key:latest,GEMINI_API_KEY=gemini-api-key:latest" \
-  --set-env-vars="ALLOWED_ORIGINS=https://rolehatch.com,UPSTASH_REDIS_URL=https://your-instance.upstash.io,FRONTEND_URL=https://rolehatch.com,SUPABASE_URL=https://your-project-ref.supabase.co"
+gcloud builds submit --config infra/cloudbuild.yaml \
+  --substitutions=_UPSTASH_URL=https://your-instance.upstash.io,_SUPABASE_URL=https://your-project-ref.supabase.co,_TAG=$(git rev-parse --short HEAD)
 ```
 
-Secrets are pulled from Google Secret Manager at deploy time; never baked into the image or committed. Requires an active billing account linked to the GCP project (`gcloud billing projects link`), even though usage typically stays within Cloud Run's Always Free tier (2M requests/month).
+`_UPSTASH_URL` and `_SUPABASE_URL` have no defaults on purpose, so a build that forgets them fails instead of overwriting production config. The pipeline uses `--update-secrets` and `--update-env-vars`, so values configured outside the file (for example M-Pesa) are preserved.
 
-Paystack webhook URL to register in the Paystack dashboard: `https://<api-domain>/api/promote/webhook`.
+Secrets (`DATABASE_URL`, `SUPABASE_JWT_SECRET`, `UPSTASH_REDIS_TOKEN`, `SCHEDULER_SECRET`, `PAYSTACK_SECRET_KEY`, `REVALIDATE_SECRET`, `GEMINI_API_KEY`) are pulled from Google Secret Manager at deploy time; never baked into the image or committed. `backend/.dockerignore` and `.gcloudignore` keep `.env` files and Terraform state out of the image and the build upload. Requires an active billing account linked to the GCP project (`gcloud billing projects link`), even though usage typically stays within Cloud Run's Always Free tier (2M requests/month).
+
+Use the Supabase **session pooler** URL for `DATABASE_URL`: the direct `db.<ref>.supabase.co` host is IPv6-only and Cloud Run egress is IPv4.
+
+Map the API domain, then switch `api` to **Proxied** in Cloudflare only after the Cloud Run certificate is active:
+
+```bash
+gcloud beta run domain-mappings create --service rolehatch-api --domain api.perchrole.com --region us-central1
+```
+
+Paystack webhook URL to register in the Paystack dashboard: `https://api.perchrole.com/api/promote/webhook`. Add a Cloudflare WAF skip rule for that path so webhook callbacks aren't challenged.
 
 ### Frontend → Vercel
 
 ```bash
 cd frontend
 vercel link
-vercel env add NEXT_PUBLIC_API_URL production
+vercel env add NEXT_PUBLIC_API_URL production        # https://api.perchrole.com
 vercel env add NEXT_PUBLIC_SUPABASE_URL production
 vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
 vercel --prod
 ```
 
+In Supabase → Authentication → URL Configuration, set the Site URL to `https://perchrole.com` and add `https://perchrole.com/auth/callback` as a redirect URL.
+
 ### CI/CD
 
-`infra/cloudbuild.yaml` automates build → push → deploy → migrate on every push to `main`. Trigger it once via:
+`infra/cloudbuild.yaml` automates build → push → migrate → deploy on every push to `main`. Create the trigger once, then add `_UPSTASH_URL` and `_SUPABASE_URL` as substitutions on it:
 
 ```bash
 gcloud builds triggers create github \
@@ -429,14 +445,15 @@ gcloud builds triggers create github \
   --branch-pattern="^main$" --build-config="infra/cloudbuild.yaml"
 ```
 
-### Scheduled scraping
+### Infrastructure (Terraform)
+
+`infra/main.tf` manages Artifact Registry, Secret Manager secret names, IAM and the Cloud Scheduler jobs (hourly sync, daily purge of hidden jobs). Never commit state or variable files.
 
 ```bash
-gcloud scheduler jobs create http rolehatch-sync \
-  --schedule="0 * * * *" \
-  --uri="https://rolehatch-api-xxxxx.run.app/internal/sync-jobs" \
-  --http-method=POST \
-  --headers="X-Scheduler-Secret=$(gcloud secrets versions access latest --secret=scheduler-secret)"
+cd infra
+terraform apply -var project_id=YOUR_PROJECT_ID \
+  -var api_base_url=https://api.perchrole.com \
+  -var scheduler_secret="$(gcloud secrets versions access latest --secret=scheduler-secret)"
 ```
 
 Full step-by-step walkthrough (Supabase → GCP secrets → Cloud Run → migrations → Vercel → domain mapping → post-deploy checklist) is documented in `BUILDLOG.md`.
@@ -449,9 +466,10 @@ Full step-by-step walkthrough (Supabase → GCP secrets → Cloud Run → migrat
 - **Input validation**: every request/response shaped by Pydantic schemas
 - **JWT verification**: Supabase tokens verified server-side on every protected route
 - **Row-Level Security**: database-level enforcement independent of API logic
-- **Secrets**: never committed; loaded via environment locally, Google Secret Manager in production
+- **Secrets**: never committed; loaded via environment locally, Google Secret Manager in production; excluded from Docker images and Cloud Build uploads
 - **CORS**: explicit origin allowlist, no wildcards
 - **Security headers**: `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security` set on every response
+- **Rate limiting**: per real client IP behind Cloudflare, with spoof-resistant header handling
 - **Webhook signature verification**: Paystack events verified (HMAC-SHA512) before any state change; client redirects are never trusted as proof of payment
 - **Idempotent payments**: grants keyed on the transaction reference; credit spends are atomic and refunded on failure
 - **Employer verification**: promoted-listing access gated on verified work-email domain ownership, with free-mail domains blocked
