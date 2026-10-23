@@ -43,7 +43,8 @@ steps:
       - "--cpu-boost"
       - "--timeout=1800"
       # ^@^ switches the delimiter to "@" so ALLOWED_ORIGINS can contain commas.
-      - "--update-env-vars=^@^ALLOWED_ORIGINS=https://perchrole.com,https://www.perchrole.com@UPSTASH_REDIS_URL=${_UPSTASH_URL}@FRONTEND_URL=https://perchrole.com@SUPABASE_URL=${_SUPABASE_URL}"
+      # Pool: worst case 10 instances x 2 workers x (3 + 2) = 100 DB connections.
+      - "--update-env-vars=^@^ALLOWED_ORIGINS=https://perchrole.com,https://www.perchrole.com@UPSTASH_REDIS_URL=${_UPSTASH_URL}@FRONTEND_URL=https://perchrole.com@SUPABASE_URL=${_SUPABASE_URL}@DB_POOL_SIZE=3@DB_MAX_OVERFLOW=2@WEB_CONCURRENCY=2"
       # Previous Perchie provider (Anthropic), kept for future use. To switch back, uncomment this
       # line and comment out the Gemini line below (the anthropic-api-key secret must exist in main.tf):
       # - "--update-secrets=DATABASE_URL=database-url:latest,SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,UPSTASH_REDIS_TOKEN=upstash-token:latest,SCHEDULER_SECRET=scheduler-secret:latest,PAYSTACK_SECRET_KEY=paystack-secret-key:latest,REVALIDATE_SECRET=revalidate-secret:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest"
@@ -59,10 +60,12 @@ images:
   - "us-central1-docker.pkg.dev/$PROJECT_ID/rolehatch/api:${_TAG}"
   - "us-central1-docker.pkg.dev/$PROJECT_ID/rolehatch/api:latest"
 
+# _UPSTASH_URL and _SUPABASE_URL deliberately have NO defaults: a build that forgets them
+# must fail instead of deploying placeholder values over production config.
+# Pass them in the trigger or with:
+#   --substitutions=_UPSTASH_URL=https://...,_SUPABASE_URL=https://...,_TAG=$(git rev-parse --short HEAD)
 substitutions:
   _TAG: "manual"                    # triggers override this with $SHORT_SHA; manual runs pass a unique value
-  _UPSTASH_URL: "https://your-instance.upstash.io"
-  _SUPABASE_URL: "https://your-project-ref.supabase.co"
 
 options:
   logging: CLOUD_LOGGING_ONLY
