@@ -3,8 +3,7 @@ import re
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from app.core.limiter import limiter
 
 from app.core.security import get_current_user
 from app.schemas.cv import ParseResponse, RenderRequest
@@ -13,7 +12,7 @@ from app.services.cv.renderer import render_pdf
 from app.services.cv.templates import TEMPLATES, public_template
 
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
+
 
 
 @router.get("/templates")
