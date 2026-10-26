@@ -16,6 +16,7 @@ from app.models.applicant_profile import ApplicantProfile
 from app.models.wallet import Wallet, WalletTransaction
 from app.models.cv_build import CvBuildCredit, CvBuild, CvCreditPurchase  # noqa
 from app.models.ats_scan import ATSScanQuota, ATSScanPayment  # noqa
+from app.models.doc_builder import DocBuilderQuota, DocBuilderConsumption, DocBuilderPayment  # noqa
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
