@@ -1,4 +1,4 @@
-# backend/app/schemas/wallet.py  (M-Pesa + Paystack + PayPal)
+# backend/app/schemas/wallet.py  (M-Pesa + Paystack + PayPal + Bachs)
 from pydantic import BaseModel, Field
 
 
@@ -13,6 +13,10 @@ class PaystackDepositIn(BaseModel):
 
 class PaypalDepositIn(BaseModel):
     amount: int = Field(ge=10, le=150_000)  # whole KES; converted to USD server-side at PAYPAL_KES_PER_USD
+
+
+class BachsDepositIn(BaseModel):
+    amount: int = Field(ge=10, le=150_000)  # whole KES; converted to USD server-side at BACHS_KES_PER_USD
 
 
 class WithdrawIn(BaseModel):
