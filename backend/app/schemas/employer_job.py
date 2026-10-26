@@ -1,5 +1,5 @@
 # backend/app/schemas/employer_job.py
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 REMOTE_TYPES = ("remote", "hybrid", "onsite", "field")
 COMMITMENTS = ("full_time", "part_time", "contract")
@@ -42,6 +42,9 @@ class JobPostCreate(BaseModel):
 class JobPostUpdate(BaseModel):
     """Partial update: only fields present in the request body are changed.
     Sending null for an optional field clears it; title and apply_url can't be cleared."""
+    # Strip before length checks so a whitespace-only title is rejected by min_length
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     title: str | None = Field(default=None, min_length=1, max_length=300)
     location: str | None = Field(default=None, max_length=255)
     remote_type: str | None = None
