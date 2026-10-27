@@ -4,14 +4,23 @@ import Footer from "@/components/Footer";
 import ChatWidget from "@/components/ChatWidget";
 import { Providers } from "./providers";
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Bricolage_Grotesque } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
+import localFont from "next/font/local";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/seo";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
-// Display face for headings; wired to the Chakra `heading` font token in theme/index.ts
-const display = Bricolage_Grotesque({ variable: "--font-display", subsets: ["latin"] });
+// Fonts are self-hosted (no Google Fonts fetch at build time), so Docker/CI builds
+// work offline. GeistSans/GeistMono expose --font-geist-sans / --font-geist-mono.
+//
+// Display face for headings; wired to the Chakra `heading` font token in theme/index.ts.
+// Served from the @fontsource-variable package, still exposed as --font-display.
+const display = localFont({
+  src: "../node_modules/@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2",
+  variable: "--font-display",
+  weight: "200 800",
+  display: "swap",
+});
 
 // Note: no canonical/url here. Child metadata inherits these keys, so a root
 // canonical would point every page at "/". Each page sets its own alternates.
@@ -71,7 +80,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${display.variable} h-full antialiased`}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${display.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
