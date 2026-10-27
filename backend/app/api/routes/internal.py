@@ -47,11 +47,31 @@ async def _trigger_frontend_revalidation():
         logger.warning("Failed to trigger frontend revalidation", exc_info=True)
 
 
+def _load_companies(platform: str | None) -> list[Company]:
+    """Short-lived session: load, detach, release the connection immediately so the
+    long scrape never holds a pooled connection open (or idle-in-transaction)."""
+    session = SessionLocal()
+    try:
+        query = session.query(Company).filter(
+            Company.is_active.is_(True),
+            Company.source_platform.in_(list(SCRAPERS.keys())),  # excludes "direct" companies
+        )
+        if platform:
+            query = query.filter(Company.source_platform == platform)
+        companies = query.all()
+        session.expunge_all()  # loaded attributes stay readable after close
+        return companies
+    finally:
+        session.close()
+
+
 def _persist_in_own_session(company_id, raw_jobs: list[dict]) -> dict:
     """Each concurrent company needs its own Session (Sessions aren't thread-safe)."""
     session = SessionLocal()
     try:
         company = session.get(Company, company_id)
+        if company is None:
+            raise ValueError(f"Company {company_id} no longer exists")
         return persist_company_jobs(session, company, raw_jobs)
     finally:
         session.close()
@@ -77,7 +97,7 @@ def _release_lock(key: str) -> None:
 # serves every other user's requests. The async scrapers run on a private
 # event loop inside this thread via asyncio.run().
 @router.post("/internal/sync-jobs", dependencies=[Depends(verify_scheduler_secret)])
-def sync_all_companies(platform: str | None = None, db: Session = Depends(get_db)):
+def sync_all_companies(platform: str | None = None):
     """Optional ?platform=greenhouse|lever|workday|bamboohr|ashby|smartrecruiters|workable|recruitee
     to split runs across schedulers."""
     lock_key = f"lock:sync-jobs:{platform or 'all'}"
@@ -86,13 +106,7 @@ def sync_all_companies(platform: str | None = None, db: Session = Depends(get_db
 
     started = time.monotonic()
     try:
-        query = db.query(Company).filter(
-            Company.is_active.is_(True),
-            Company.source_platform.in_(list(SCRAPERS.keys())),  # excludes "direct" companies
-        )
-        if platform:
-            query = query.filter(Company.source_platform == platform)
-        companies = query.all()
+        companies = _load_companies(platform)
 
         results = {"synced": 0, "failed": [], "details": {}}
 
