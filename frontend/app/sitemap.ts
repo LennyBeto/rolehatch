@@ -1,26 +1,38 @@
 // frontend/app/sitemap.ts
 import type { MetadataRoute } from "next";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://perchrole.com";
+import { BLOG_POSTS } from "@/lib/blogPosts";
+import { SITE_URL } from "@/lib/seo";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const now = new Date();
+
   const staticRoutes: MetadataRoute.Sitemap = [
-    { url: `${SITE_URL}/`, changeFrequency: "hourly", priority: 1 },
-    { url: `${SITE_URL}/post-job`, changeFrequency: "monthly", priority: 0.5 },
-    { url: `${SITE_URL}/pricing`, changeFrequency: "monthly", priority: 0.5 },
-    { url: `${SITE_URL}/company`, changeFrequency: "monthly", priority: 0.4 },
-    { url: `${SITE_URL}/blog`, changeFrequency: "weekly", priority: 0.4 },
+    { url: `${SITE_URL}/`, lastModified: now, changeFrequency: "hourly", priority: 1 },
+    { url: `${SITE_URL}/pricing`, lastModified: now, changeFrequency: "monthly", priority: 0.5 },
+    { url: `${SITE_URL}/company`, lastModified: now, changeFrequency: "monthly", priority: 0.4 },
+    { url: `${SITE_URL}/blog`, lastModified: now, changeFrequency: "weekly", priority: 0.4 },
     { url: `${SITE_URL}/contact`, changeFrequency: "yearly", priority: 0.2 },
+    { url: `${SITE_URL}/privacy`, changeFrequency: "yearly", priority: 0.1 },
+    { url: `${SITE_URL}/terms`, changeFrequency: "yearly", priority: 0.1 },
   ];
 
+  const blogRoutes: MetadataRoute.Sitemap = BLOG_POSTS.map((post) => ({
+    url: `${SITE_URL}/blog/${post.slug}`,
+    lastModified: new Date(post.publishedAt),
+    changeFrequency: "monthly",
+    priority: 0.6,
+  }));
+
+  const baseRoutes = [...staticRoutes, ...blogRoutes];
+
   try {
-    // Revalidated hourly, and force-busted right after each scrape cycle via
-    // /api/revalidate — so the sitemap Google fetches always reflects the
-    // latest sync, not a stale one up to an hour old.
+    // Cached for 30 minutes (1800s), and force-busted right after each scrape
+    // cycle via /api/revalidate, so the sitemap Google fetches always reflects
+    // the latest sync rather than a stale one.
     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/jobs/sitemap-data`, {
       next: { revalidate: 1800 },
     });
-    if (!res.ok) return staticRoutes;
+    if (!res.ok) return baseRoutes;
 
     const jobs: { id: string; updated_at: string | null }[] = await res.json();
     const jobRoutes: MetadataRoute.Sitemap = jobs.map((job) => ({
@@ -30,8 +42,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     }));
 
-    return [...staticRoutes, ...jobRoutes];
+    return [...baseRoutes, ...jobRoutes];
   } catch {
-    return staticRoutes;
+    return baseRoutes;
   }
 }
