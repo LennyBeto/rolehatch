@@ -77,7 +77,8 @@ SCRAPERS = {
 
 
 def _parse_posted_at(raw_value):
-    """Accepts ISO strings, date-only strings, and epoch seconds/milliseconds
+    """Accepts ISO strings, non-ISO date strings (e.g. Recruitee's
+    '2026-09-10 12:00:00 UTC'), date-only strings, and epoch seconds/milliseconds
     (Lever sends ms). Naive datetimes are treated as UTC; future dates are
     clamped to now so a listing never shows a date in the future."""
     if raw_value in (None, ""):
@@ -89,7 +90,11 @@ def _parse_posted_at(raw_value):
                 n /= 1000
             dt = datetime.fromtimestamp(n, tz=timezone.utc)
         else:
-            dt = date_parser.isoparse(str(raw_value))
+            raw = str(raw_value)
+            try:
+                dt = date_parser.isoparse(raw)
+            except ValueError:
+                dt = date_parser.parse(raw)   # lenient fallback; ParserError is a ValueError
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
     except (ValueError, TypeError, OverflowError, OSError):
