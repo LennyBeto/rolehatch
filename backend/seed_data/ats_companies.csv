@@ -1,0 +1,12 @@
+# name,domain,board_token,source_platform,industry
+# Lines starting with # are ignored. Tokens are verified live by the seed script before insert.
+# Ashby: board name from jobs.ashbyhq.com/<board_name>
+# SmartRecruiters: company identifier from jobs.smartrecruiters.com/<identifier>
+# Workable: subdomain from apply.workable.com/<subdomain>
+# Recruitee: subdomain from <subdomain>.recruitee.com
+name,domain,board_token,source_platform,industry
+Ramp,ramp.com,ramp,ashby,Fintech
+Linear,linear.app,linear,ashby,Developer Tools
+OpenAI,openai.com,openai,ashby,Artificial Intelligence
+Cohere,cohere.com,cohere,ashby,Artificial Intelligence
+Visa,visa.com,Visa,smartrecruiters,Payments
