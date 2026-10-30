@@ -15,6 +15,14 @@ variable "project_id" { type = string }
 variable "scheduler_secret" {
   type      = string
   sensitive = true # pass via TF_VAR_scheduler_secret or -var, never commit the real value
+
+  # Fail at plan time instead of deploying a header Cloud Run will reject with 403.
+  # A trailing \r or \n (e.g. from $(gcloud secrets versions access ...) in Git Bash) is
+  # trimmed below, but whitespace inside the value or a short value is always a mistake.
+  validation {
+    condition     = length(trimspace(var.scheduler_secret)) >= 32 && !can(regex("\\s", trimspace(var.scheduler_secret)))
+    error_message = "scheduler_secret must be at least 32 characters and contain no whitespace."
+  }
 }
 
 # Base URL the schedulers call. Defaults to the current domain so applying this file
@@ -77,7 +85,7 @@ resource "google_cloud_scheduler_job" "sync_jobs" {
     uri         = "${var.api_base_url}/internal/sync-jobs"
     http_method = "POST"
     headers = {
-      "X-Scheduler-Secret" = var.scheduler_secret
+      "X-Scheduler-Secret" = local.scheduler_secret
     }
   }
 }
@@ -94,13 +102,16 @@ resource "google_cloud_scheduler_job" "purge_hidden_jobs" {
     uri         = "${var.api_base_url}/internal/purge-hidden-jobs"
     http_method = "POST"
     headers = {
-      "X-Scheduler-Secret" = var.scheduler_secret
+      "X-Scheduler-Secret" = local.scheduler_secret
     }
   }
 }
 
 # Service accounts are named after the project NUMBER, not the project ID.
 locals {
+  # Strips a stray trailing \r or \n so the header always matches the stored secret.
+  scheduler_secret = trimspace(var.scheduler_secret)
+
   legacy_cloudbuild_sa = "${data.google_project.current.number}@cloudbuild.gserviceaccount.com"
   cloudbuild_sa_email  = var.build_service_account_email != "" ? var.build_service_account_email : local.legacy_cloudbuild_sa
   cloudbuild_sa        = "serviceAccount:${local.cloudbuild_sa_email}"
