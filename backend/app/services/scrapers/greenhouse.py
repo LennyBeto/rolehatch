@@ -17,7 +17,8 @@ class GreenhouseScraper(BaseScraper):
                 "url": j["absolute_url"],
                 "source": "greenhouse",
                 # first_published is the true posting date; updated_at is the fallback
-                "posted_at": j.get("first_published") or j.get("updated_at"),
+                #"posted_at": j.get("first_published") or j.get("updated_at"),
+                "posted_at": j.get("first_published") or j.get("updated_at"),  # first_published = original posting date
                 "content": j.get("content"),  # entity-escaped HTML — cleaned in the pipeline
             }
             for j in data.get("jobs", [])
