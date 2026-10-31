@@ -11,6 +11,8 @@ class ApplicantProfileOut(BaseModel):
     avatar_url: str | None = None
     cv_filename: str | None = None
     has_match_score: bool = False
+    is_public: bool = True
+    last_ats_score: int | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -26,6 +28,8 @@ class ApplicantProfileOut(BaseModel):
             "avatar_url": getattr(data, "avatar_url", None),
             "cv_filename": getattr(data, "cv_filename", None),
             "has_match_score": getattr(data, "embedding", None) is not None,
+            "is_public": getattr(data, "is_public", True),
+            "last_ats_score": getattr(data, "last_ats_score", None),
         }
 
 
@@ -35,6 +39,7 @@ class ApplicantProfileUpdate(BaseModel):
     full_name: str | None = Field(default=None, max_length=255)
     expertise: str | None = Field(default=None, max_length=100)
     avatar_id: str | None = Field(default=None, max_length=50)
+    is_public: bool = True
 
 
 class CVScanResult(BaseModel):
