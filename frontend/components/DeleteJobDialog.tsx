@@ -3,8 +3,8 @@
 import { Dialog, Button, Text, Portal, CloseButton } from "@chakra-ui/react";
 import { useState } from "react";
 import { deleteJob } from "@/lib/api";
+import type { EmployerJob } from "@/lib/types";
 import { toaster } from "@/components/ui/toaster";
-import type { EmployerJob } from "./EditJobDialog";
 
 type Props = {
   job: EmployerJob | null;
