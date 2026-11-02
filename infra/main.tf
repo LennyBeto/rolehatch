@@ -61,10 +61,18 @@ resource "google_secret_manager_secret" "secrets" {
     "paystack-secret-key",
     "revalidate-secret", # used by the post-sync frontend revalidation in internal.py
     "gemini-api-key",    # Perchie chatbot (Google AI Studio)
+    # Being retired (PayPal and Stripe are removed from the project). Kept here ONLY so
+    # Terraform doesn't destroy the secrets while code may still read them. Once
+    # `grep -rniE "stripe|paypal"` on the codebase is clean, delete these four lines and apply.
+    "paypal-client-id", "paypal-client-secret",
+    "stripe-secret-key", "stripe-webhook-secret",
     # "anthropic-api-key", # Previous Perchie provider (Anthropic), uncomment to switch back
   ])
   secret_id = each.key
-  replication { auto {} }
+
+  replication {
+    auto {}
+  }
 }
 # NOTE: secret VALUES are never set here. Add versions manually via
 # `gcloud secrets versions add`, keeping them out of source control and Terraform state.
