@@ -5,23 +5,8 @@ import {
 } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { updateJob } from "@/lib/api";
+import type { EmployerJob } from "@/lib/types";
 import { toaster } from "@/components/ui/toaster";
-
-export type EmployerJob = {
-  id: string;
-  title: string;
-  source: string;
-  editable: boolean;
-  location: string | null;
-  remote_type: string | null;
-  commitment: string | null;
-  salary_min: number | null;
-  salary_max: number | null;
-  description: string | null;
-  apply_url: string;
-  is_featured: boolean;
-  featured_until: string | null;
-};
 
 type Props = {
   job: EmployerJob | null;
@@ -48,7 +33,7 @@ export default function EditJobDialog({ job, onClose, onSaved }: Props) {
     setCommitment(job.commitment ?? "");
     setSalaryMin(job.salary_min != null ? String(job.salary_min) : "");
     setSalaryMax(job.salary_max != null ? String(job.salary_max) : "");
-    setApplyUrl(job.apply_url);
+    setApplyUrl(job.source_url);
     setDescription(job.description ?? "");
   }, [job]);
 

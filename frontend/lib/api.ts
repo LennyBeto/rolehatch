@@ -44,6 +44,8 @@ export const markApplied = (jobId: string) =>
 export const hideJob = (jobId: string) =>
   authedFetch(`/api/saved-jobs/${jobId}`, { method: "PATCH", body: JSON.stringify({ status: "hidden" }) });
 
+export const getMyApplications = () => authedFetch("/api/saved-jobs/applications");
+
 // ── Employer listing management ──────────────────────────
 export type EmployerJobUpdate = {
   title?: string;
@@ -75,6 +77,8 @@ export type ApplicantProfile = {
   avatar_url?: string | null;
   cv_filename: string | null;
   has_match_score: boolean;
+  is_public: boolean;
+  last_ats_score: number | null;
 };
 
 // Summarized detail returned by GET/POST /api/applicant/profile/summary
@@ -104,7 +108,7 @@ export const SUMMARY_MAX_WORDS = 50;
 export const getApplicantProfile = () => authedFetch("/api/applicant/profile");
 
 export const updateApplicantProfile = (
-  payload: Partial<Pick<ApplicantProfile, "full_name" | "expertise" | "avatar_id">>
+  payload: Partial<Pick<ApplicantProfile, "full_name" | "expertise" | "avatar_id" | "is_public">>
 ) => authedFetch("/api/applicant/profile", { method: "PUT", body: JSON.stringify(payload) });
 
 // Reset name, expertise, summary and profile image to defaults (CV and visibility are kept)
