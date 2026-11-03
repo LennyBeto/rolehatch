@@ -14,6 +14,7 @@ from app.db.session import SessionLocal, get_db
 from app.models.job import Company
 from app.services.hidden_jobs import purge_stale_hidden_jobs
 from app.services.pipeline import SCRAPERS, fetch_company_jobs, persist_company_jobs
+from app.services.scrapers.base import RETRY_STATUS
 
 logger = logging.getLogger("perchrole.internal")
 router = APIRouter()
@@ -21,6 +22,7 @@ router = APIRouter()
 PER_COMPANY_TIMEOUT = 1800  # seconds — one slow tenant must not stall the whole run
 SYNC_CONCURRENCY = 6        # companies synced in parallel
 SYNC_LOCK_TTL = 3300        # auto-expires if a run crashes; < 1h so the next tick can run
+REVALIDATION_ATTEMPTS = 3
 
 
 def verify_scheduler_secret(x_scheduler_secret: str = Header(...)):
@@ -30,21 +32,38 @@ def verify_scheduler_secret(x_scheduler_secret: str = Header(...)):
         raise HTTPException(403, "Forbidden")
 
 
-async def _trigger_frontend_revalidation():
+async def _trigger_frontend_revalidation() -> bool | None:
     """Growth: bust the frontend's sitemap/homepage cache right after a sync
     so freshly scraped listings show up immediately, rather than waiting out
     Next.js's ISR window — keeps Google's crawl signal and returning
     visitors' first paint both current with what just got scraped."""
     if not settings.revalidate_secret:
-        return
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(
-                f"{settings.frontend_url}/api/revalidate",
-                params={"secret": settings.revalidate_secret},
-            )
-    except Exception:
-        logger.warning("Failed to trigger frontend revalidation", exc_info=True)
+        return None
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        for attempt in range(1, REVALIDATION_ATTEMPTS + 1):
+            try:
+                response = await client.post(
+                    f"{settings.frontend_url}/api/revalidate",
+                    params={"secret": settings.revalidate_secret},
+                )
+                response.raise_for_status()
+                return True
+            except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+                retryable = (
+                    not isinstance(exc, httpx.HTTPStatusError)
+                    or exc.response.status_code in RETRY_STATUS
+                )
+                if not retryable or attempt == REVALIDATION_ATTEMPTS:
+                    logger.warning(
+                        "Failed to trigger frontend revalidation after %s attempt(s)",
+                        attempt,
+                        exc_info=True,
+                    )
+                    return False
+                await asyncio.sleep(2 ** attempt)
+
+    return False
 
 
 def _load_companies(platform: str | None) -> list[Company]:
@@ -150,7 +169,11 @@ def sync_all_companies(platform: str | None = None):
                     results["cache_keys_cleared"] = await asyncio.to_thread(invalidate_listing_caches)
                 except Exception:
                     logger.warning("Cache invalidation failed", exc_info=True)
-                await _trigger_frontend_revalidation()
+                revalidation = await _trigger_frontend_revalidation()
+                if revalidation is not None:
+                    results["frontend_revalidation"] = (
+                        "succeeded" if revalidation else "failed"
+                    )
 
         asyncio.run(run())
         results["duration_seconds"] = round(time.monotonic() - started, 1)
