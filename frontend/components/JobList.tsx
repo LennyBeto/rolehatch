@@ -15,6 +15,7 @@ type Job = Parameters<typeof JobCard>[0]["job"];
 type SearchResponse = { jobs: Job[]; total: number; page: number; page_size: number; total_pages: number };
 
 const SIGNED_OUT_PREVIEW_COUNT = 3;
+const SALARY_SLIDER_MAX = 300; // must match FilterSidebar; at the ceiling there is no upper bound
 
 export default function JobList() {
   const router = useRouter();
@@ -39,6 +40,7 @@ export default function JobList() {
     const remoteType = searchParams.get("remote_type");
     const salaryMin = searchParams.get("salary_min");
     const salaryMax = searchParams.get("salary_max");
+    const hideUnlisted = searchParams.get("hide_unlisted");
     const location = searchParams.get("location");
     // Sidebar sets "languages" (comma-separated); fall back to the legacy "language" param
     const languages = searchParams.get("languages") ?? searchParams.get("language");
@@ -46,8 +48,10 @@ export default function JobList() {
 
     if (title) params.set("title", title);
     if (remoteType) params.set("remote_type", remoteType);
-    if (salaryMin) params.set("salary_min", salaryMin);
-    if (salaryMax) params.set("salary_max", salaryMax);
+    if (salaryMin && Number(salaryMin) > 0) params.set("salary_min", salaryMin);
+    // At the slider ceiling there is no upper bound ("$300k+")
+    if (salaryMax && Number(salaryMax) < SALARY_SLIDER_MAX) params.set("salary_max", salaryMax);
+    if (hideUnlisted === "1") params.set("include_unlisted", "false");
     if (location) params.set("location", location);
     if (languages) params.set("languages", languages);
     if (quickFilter) params.set("quick_filter", quickFilter);
