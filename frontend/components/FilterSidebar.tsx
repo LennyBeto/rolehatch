@@ -3,8 +3,8 @@
 import {
   Box, Heading, CheckboxGroup, Checkbox, VStack, Slider, Text, Wrap,
 } from "@chakra-ui/react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useDebouncedCallback } from "@/lib/useDebouncedCallback";
 
 const REMOTE_TYPES = [
   { label: "Remote", value: "remote" },
@@ -29,6 +29,9 @@ const LANGUAGES = [
   { label: "SQL", value: "sql" },
 ];
 
+const SALARY_MIN = 0;
+const SALARY_MAX = 300; // slider ceiling; at max the upper bound means "$300k+" (no cap)
+
 export default function FilterSidebar() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -37,8 +40,18 @@ export default function FilterSidebar() {
   // "languages" is canonical; "language" is read only so older bookmarked URLs still hydrate the checkboxes
   const selectedLanguages = (searchParams.get("languages") ?? searchParams.get("language"))
     ?.split(",").map((v) => v.trim().toLowerCase()).filter(Boolean) ?? [];
-  const salaryMin = Number(searchParams.get("salary_min") ?? 0);
-  const salaryMax = Number(searchParams.get("salary_max") ?? 200);
+  const includeUnlisted = searchParams.get("hide_unlisted") !== "1";
+
+  // URL is the source of truth once a change is committed.
+  const urlMin = Number(searchParams.get("salary_min") ?? SALARY_MIN);
+  const urlMax = Number(searchParams.get("salary_max") ?? SALARY_MAX);
+  const urlKey = `${urlMin}-${urlMax}`;
+
+  // While dragging, the thumbs follow local state so they never lag or snap back.
+  // The draft is tied to the URL it started from, so back/forward or chip
+  // changes discard it automatically.
+  const [draft, setDraft] = useState<{ base: string; value: number[] } | null>(null);
+  const shown = draft && draft.base === urlKey ? draft.value : [urlMin, urlMax];
 
   const updateParams = (updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -62,9 +75,15 @@ export default function FilterSidebar() {
     updateParams({ languages: normalized.length ? normalized.join(",") : null });
   };
 
-  const debouncedSalaryUpdate = useDebouncedCallback((value: number[]) => {
-    updateParams({ salary_min: String(value[0]), salary_max: String(value[1]) });
-  }, 400);
+  // Fires once, when the user releases a thumb — one search per gesture.
+  const commitSalary = (value: number[]) => {
+    updateParams({
+      salary_min: value[0] > SALARY_MIN ? String(value[0]) : null,
+      salary_max: value[1] < SALARY_MAX ? String(value[1]) : null,
+    });
+  };
+
+  const maxLabel = shown[1] >= SALARY_MAX ? `$${SALARY_MAX}k+` : `$${shown[1]}k`;
 
   return (
     <Box bg="surface" p={4} borderRadius="md" border="1px solid #E5E3DD">
@@ -105,11 +124,13 @@ export default function FilterSidebar() {
       <Heading size="sm" mb={3}>Salary ($k/yr)</Heading>
       <Slider.Root
         colorPalette="brand"
-        min={0}
-        max={300}
+        min={SALARY_MIN}
+        max={SALARY_MAX}
         step={10}
-        value={[salaryMin, salaryMax]}
-        onValueChange={(e) => debouncedSalaryUpdate(e.value)}
+        minStepsBetweenThumbs={1}
+        value={shown}
+        onValueChange={(e) => setDraft({ base: urlKey, value: e.value })}
+        onValueChangeEnd={(e) => commitSalary(e.value)}
         mb={2}
       >
         <Slider.Control>
@@ -120,7 +141,17 @@ export default function FilterSidebar() {
           <Slider.Thumb index={1}><Slider.HiddenInput /></Slider.Thumb>
         </Slider.Control>
       </Slider.Root>
-      <Text fontSize="sm" color="gray.600">${salaryMin}k – ${salaryMax}k</Text>
+      <Text fontSize="sm" color="gray.600" mb={3}>${shown[0]}k – {maxLabel}</Text>
+
+      <Checkbox.Root
+        colorPalette="brand"
+        checked={includeUnlisted}
+        onCheckedChange={(e) => updateParams({ hide_unlisted: e.checked ? null : "1" })}
+      >
+        <Checkbox.HiddenInput />
+        <Checkbox.Control />
+        <Checkbox.Label fontSize="sm">Include jobs without a listed salary</Checkbox.Label>
+      </Checkbox.Root>
     </Box>
   );
 }
