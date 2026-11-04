@@ -3,7 +3,7 @@ import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import String, case, cast, func, or_, select
+from sqlalchemy import String, and_, case, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
@@ -24,9 +24,9 @@ STATS_CACHE_TTL = 1800
 JOB_DETAIL_CACHE_TTL = 3600
 
 # Bumped so stale cached results are discarded (new remote_type values, salary range
-# semantics, title/tech matching). cache.py invalidates with the wildcard 'search*',
-# so a future bump needs no other change.
-SEARCH_CACHE_PREFIX = "search_v4"
+# semantics, title/tech matching, include_unlisted). cache.py invalidates with the
+# wildcard 'search*', so a future bump needs no other change.
+SEARCH_CACHE_PREFIX = "search_v5"
 
 SALARY_SLIDER_MAX = 300   # slider's top end ($k) — treated as "no upper limit"
 SHORT_TERM_LEN = 3        # terms this short match on word boundaries ("pm" != "development")
@@ -80,6 +80,7 @@ def build_search_query(
     quick_filter: str | None = None,
     resume_embedding: list[float] | None = None,
     salary_max: int | None = None,
+    include_unlisted: bool = True,
 ):
     q = (
         select(
@@ -125,16 +126,27 @@ def build_search_query(
         if phrases:
             q = q.where(or_(*[_title_match(p) for p in phrases]))
 
-    # Salary: a job matches when its range overlaps the selected range. Jobs with
-    # no listed salary are excluded only while a salary filter is active.
+    # Salary (values in $k/yr): a job matches when its range overlaps the selected
+    # range. A job with only one bound listed is treated as having both.
+    # Jobs with no listed salary stay visible unless include_unlisted is False.
+    job_low = func.coalesce(Job.salary_min, Job.salary_max)
+    job_high = func.coalesce(Job.salary_max, Job.salary_min)
     has_cap = salary_max is not None and salary_max < SALARY_SLIDER_MAX
-    if salary_min or has_cap:
-        job_low = func.coalesce(Job.salary_min, Job.salary_max)
-        job_high = func.coalesce(Job.salary_max, Job.salary_min)
-        if salary_min:
-            q = q.where(job_high >= salary_min)
-        if has_cap:
-            q = q.where(job_low <= salary_max)
+
+    salary_conditions = []
+    if salary_min:
+        salary_conditions.append(job_high >= salary_min)
+    if has_cap:
+        salary_conditions.append(job_low <= salary_max)
+
+    if salary_conditions:
+        in_range = and_(*salary_conditions)
+        if include_unlisted:
+            q = q.where(or_(in_range, job_low.is_(None)))
+        else:
+            q = q.where(in_range)
+    elif not include_unlisted:
+        q = q.where(job_low.isnot(None))
 
     if remote_type:
         types = [t.strip().lower() for t in remote_type.split(",") if t.strip()]
@@ -205,8 +217,9 @@ def _serialize_row(row, now: datetime) -> dict:
 def search_jobs(
     location: str | None = None,
     title: str | None = None,
-    salary_min: int | None = None,
-    salary_max: int | None = None,
+    salary_min: int | None = Query(None, ge=0),
+    salary_max: int | None = Query(None, ge=0),
+    include_unlisted: bool = True,
     remote_type: str | None = None,
     languages: str | None = None,   # comma-separated, e.g. "python,go"
     language: str | None = None,    # legacy alias for `languages`
@@ -228,7 +241,8 @@ def search_jobs(
 
     params = {
         "location": location, "title": title, "salary_min": salary_min,
-        "salary_max": salary_max, "remote_type": remote_type,
+        "salary_max": salary_max, "include_unlisted": include_unlisted,
+        "remote_type": remote_type,
         "languages": sorted(normalized_langs) or None,
         "quick_filter": quick_filter, "page": page,
     }
@@ -239,7 +253,7 @@ def search_jobs(
 
     base_query = build_search_query(
         db, location, title, salary_min, remote_type, languages_csv, quick_filter,
-        resume_embedding, salary_max=salary_max,
+        resume_embedding, salary_max=salary_max, include_unlisted=include_unlisted,
     )
 
     count_query = select(func.count()).select_from(base_query.order_by(None).subquery())
