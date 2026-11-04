@@ -10,6 +10,7 @@ import JobCard from "./JobCard";
 import PaginationControls from "./PaginationControls";
 import JobListSkeleton from "./JobListSkeleton";
 import SignInModal from "./SignInModal";
+import DatePostedFilter from "./DatePostedFilter";
 
 type Job = Parameters<typeof JobCard>[0]["job"];
 type SearchResponse = { jobs: Job[]; total: number; page: number; page_size: number; total_pages: number };
@@ -96,12 +97,47 @@ export default function JobList() {
     router.push(`/?${params.toString()}#listings`);
   };
 
-  if (loading) return <JobListSkeleton />;
+  // One toolbar row: Date posted first, Sort by Best Match beside it.
+  // Rendered in every state (loading / error / empty) so the filter never disappears.
+  const toolbar = (
+    <HStack gap={3} flexWrap="wrap">
+      <DatePostedFilter />
+      {user && (
+        <Button
+          size="sm"
+          variant={matchSort ? "solid" : "outline"}
+          colorPalette="brand"
+          onClick={() => setMatchSort((prev) => !prev)}
+        >
+          {matchSort ? "Sorted by Best Match" : "Sort by Best Match"}
+        </Button>
+      )}
+    </HStack>
+  );
+
+  if (loading) {
+    return (
+      <Stack gap={6}>
+        {toolbar}
+        <JobListSkeleton />
+      </Stack>
+    );
+  }
   if (error) {
-    return <Center py={20}><Text color="gray.500">Couldn&apos;t load jobs. Please try again.</Text></Center>;
+    return (
+      <Stack gap={6}>
+        {toolbar}
+        <Center py={20}><Text color="gray.500">Couldn&apos;t load jobs. Please try again.</Text></Center>
+      </Stack>
+    );
   }
   if (!data || data.jobs.length === 0) {
-    return <Center py={20}><Text color="gray.500">No jobs match your filters.</Text></Center>;
+    return (
+      <Stack gap={6}>
+        {toolbar}
+        <Center py={20}><Text color="gray.500">No jobs match your filters.</Text></Center>
+      </Stack>
+    );
   }
 
   const featured = data.jobs.filter((j) => j.is_featured);
@@ -110,18 +146,7 @@ export default function JobList() {
 
   return (
     <Stack gap={6}>
-      {user && (
-        <HStack justify="flex-end">
-          <Button
-            size="sm"
-            variant={matchSort ? "solid" : "outline"}
-            colorPalette="brand"
-            onClick={() => setMatchSort((prev) => !prev)}
-          >
-            {matchSort ? "Sorted by Best Match" : "Sort by Best Match"}
-          </Button>
-        </HStack>
-      )}
+      {toolbar}
 
       {user && !matchSort && featured.length > 0 && (
         <Box>
