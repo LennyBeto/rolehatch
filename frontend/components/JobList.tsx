@@ -45,6 +45,7 @@ export default function JobList() {
     // Sidebar sets "languages" (comma-separated); fall back to the legacy "language" param
     const languages = searchParams.get("languages") ?? searchParams.get("language");
     const quickFilter = searchParams.get("quick_filter");
+    const datePosted = searchParams.get("date_posted");
 
     if (title) params.set("title", title);
     if (remoteType) params.set("remote_type", remoteType);
@@ -55,6 +56,7 @@ export default function JobList() {
     if (location) params.set("location", location);
     if (languages) params.set("languages", languages);
     if (quickFilter) params.set("quick_filter", quickFilter);
+    if (datePosted) params.set("date_posted", datePosted);
     params.set("page", String(currentPage));
     if (matchSort && signedIn) params.set("sort_by_match", "true");
 
