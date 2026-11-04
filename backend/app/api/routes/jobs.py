@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import String, and_, case, cast, func, or_, select
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.core.cache import cache_key, get_cached, job_detail_key, set_cached
 from app.core.security import get_current_user_optional
@@ -30,6 +30,21 @@ SEARCH_CACHE_PREFIX = "search_v5"
 
 SALARY_SLIDER_MAX = 300   # slider's top end ($k) — treated as "no upper limit"
 SHORT_TERM_LEN = 3        # terms this short match on word boundaries ("pm" != "development")
+
+# "Date posted" filter windows. A missing/unknown value means "All time" (no filter).
+DATE_POSTED_WINDOWS: dict[str, timedelta] = {
+    "24h": timedelta(hours=24),
+    "3d": timedelta(days=3),
+    "1w": timedelta(weeks=1),
+    "2w": timedelta(weeks=2),
+    "3w": timedelta(weeks=3),
+    "3m": timedelta(days=90),
+    "4m": timedelta(days=120),
+    "5m": timedelta(days=150),
+    "6m": timedelta(days=180),
+    "1y": timedelta(days=365),
+    "2y": timedelta(days=730),
+}
 
 # Maps what the UI may send -> the exact lowercase keywords pipeline.py stores in Job.tech_stack
 LANGUAGE_ALIASES = {
@@ -81,6 +96,7 @@ def build_search_query(
     resume_embedding: list[float] | None = None,
     salary_max: int | None = None,
     include_unlisted: bool = True,
+    date_posted: str | None = None,
 ):
     q = (
         select(
@@ -166,6 +182,12 @@ def build_search_query(
             lang_filters.append(Job.title.op("~*")(pattern))
         q = q.where(or_(*lang_filters))
 
+    # Date posted: only jobs with a real posted_at inside the window. Jobs with no
+    # posted_at (Lever/Workday/BambooHR) are excluded here on purpose: scraped_at is
+    # refreshed by every sync, so using it would make them all look "posted today".
+    if date_posted and (window := DATE_POSTED_WINDOWS.get(date_posted)):
+        q = q.where(Job.posted_at >= datetime.now(timezone.utc) - window)
+
     if resume_embedding is not None:
         match_distance = Job.embedding.cosine_distance(resume_embedding)
         q = q.add_columns(match_distance.label("match_distance")).order_by(match_distance)
@@ -224,6 +246,7 @@ def search_jobs(
     languages: str | None = None,   # comma-separated, e.g. "python,go"
     language: str | None = None,    # legacy alias for `languages`
     quick_filter: str | None = None,
+    date_posted: str | None = None,  # 24h, 3d, 1w, 2w, 3w, 3m, 4m, 5m, 6m, 1y, 2y
     sort_by_match: bool = False,
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
@@ -232,6 +255,10 @@ def search_jobs(
     # Merge both param names, normalize, and use the normalized form everywhere
     normalized_langs = _normalize_languages(",".join(p for p in (languages, language) if p))
     languages_csv = ",".join(normalized_langs) or None
+
+    # Normalise before building the cache key so unknown values can't create
+    # extra cache entries — they behave exactly like "All time".
+    date_posted = date_posted if date_posted in DATE_POSTED_WINDOWS else None
 
     resume_embedding = None
     if sort_by_match and user:
@@ -244,7 +271,7 @@ def search_jobs(
         "salary_max": salary_max, "include_unlisted": include_unlisted,
         "remote_type": remote_type,
         "languages": sorted(normalized_langs) or None,
-        "quick_filter": quick_filter, "page": page,
+        "quick_filter": quick_filter, "date_posted": date_posted, "page": page,
     }
     use_cache = resume_embedding is None
     key = cache_key(SEARCH_CACHE_PREFIX, params)
@@ -254,6 +281,7 @@ def search_jobs(
     base_query = build_search_query(
         db, location, title, salary_min, remote_type, languages_csv, quick_filter,
         resume_embedding, salary_max=salary_max, include_unlisted=include_unlisted,
+        date_posted=date_posted,
     )
 
     count_query = select(func.count()).select_from(base_query.order_by(None).subquery())
