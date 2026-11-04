@@ -7,6 +7,7 @@ import SocialProof from "@/components/SocialProof";
 import QuickFilterChips from "@/components/QuickFilterChips";
 import FilterSidebar from "@/components/FilterSidebar";
 import MobileFilters from "@/components/MobileFilters";
+import DatePostedFilter from "@/components/DatePostedFilter";
 import JobList from "@/components/JobList";
 import JobAlertForm from "@/components/JobAlertForm";
 import EmployerPricingPreview from "@/components/EmployerPricingPreview";
@@ -71,10 +72,13 @@ export default function HomePage() {
             <FilterSidebar />
           </Box>
           <Box flex="1" minW={0}>
-            {/* Mobile-only: the sidebar is hidden below md, so filters live in a drawer */}
-            <Box display={{ base: "block", md: "none" }} mb={4}>
-              <MobileFilters />
-            </Box>
+            {/* Filter row: the drawer trigger is mobile-only (sidebar is hidden below md); Date posted shows everywhere */}
+            <Flex align="center" gap={3} wrap="wrap" mb={4}>
+              <Box display={{ base: "block", md: "none" }}>
+                <MobileFilters />
+              </Box>
+              <DatePostedFilter />
+            </Flex>
             <JobList />
           </Box>
         </Flex>
