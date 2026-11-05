@@ -13,6 +13,7 @@ import Link from "next/link";
 import PromotePaymentOptions from "@/components/PromotePaymentOptions";
 import EditJobDialog from "@/components/EditJobDialog";
 import DeleteJobDialog from "@/components/DeleteJobDialog";
+import EmployerAnalytics from "@/components/EmployerAnalytics";
 import { FEATURE_PRICING, FEATURE_DAYS } from "@/lib/pricing";
 import type { EmployerJob } from "@/lib/types";
 
@@ -23,7 +24,7 @@ const PRICING_BENEFITS = [
 ];
 
 export default function EmployerDashboard() {
-  const { user, loading } = useAuth();
+  const { user, session, loading } = useAuth();
   const router = useRouter();
 
   const [jobs, setJobs] = useState<EmployerJob[]>([]);
@@ -89,6 +90,10 @@ export default function EmployerDashboard() {
     <Box maxW="900px" mx="auto" mt={12} px={4} pb={16}>
       <Heading size="lg" mb={1}>Employer Dashboard</Heading>
       <Text color="gray.600" mb={8}>Listings matching your verified email domain.</Text>
+
+      {!jobsLoading && jobs.length > 0 && (
+        <EmployerAnalytics accessToken={session?.access_token} />
+      )}
 
       <SimpleGrid columns={{ base: 1, md: 2 }} gap={8} alignItems="start">
         <Box>
