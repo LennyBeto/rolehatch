@@ -14,8 +14,11 @@ import PromotePaymentOptions from "@/components/PromotePaymentOptions";
 import EditJobDialog from "@/components/EditJobDialog";
 import DeleteJobDialog from "@/components/DeleteJobDialog";
 import EmployerAnalytics from "@/components/EmployerAnalytics";
-import { FEATURE_PRICING, FEATURE_DAYS } from "@/lib/pricing";
+import { FEATURE_DAYS } from "@/lib/pricing";
 import type { EmployerJob } from "@/lib/types";
+
+// Shown in USD everywhere; converted to the payer's local currency at checkout.
+const FEATURE_PRICE_DISPLAY = "$49";
 
 const PRICING_BENEFITS = [
   "Pinned to the top of every matching search for 14 days",
@@ -147,7 +150,7 @@ export default function EmployerDashboard() {
                       >
                         {expandedJobId === job.id
                           ? "Cancel"
-                          : `Feature this listing — ${FEATURE_PRICING.mpesa.display}`}
+                          : `Feature this listing — ${FEATURE_PRICE_DISPLAY}`}
                       </Button>
 
                       {expandedJobId === job.id && (
@@ -183,8 +186,11 @@ export default function EmployerDashboard() {
 
         <Box bg="surface" borderRadius="lg" border="1px solid #E5E3DD" p={6}>
           <Text fontSize="sm" color="gray.600" mb={1}>Featured Listing</Text>
-          <Heading size="xl" color="brand.500" mb={1}>{FEATURE_PRICING.mpesa.display}</Heading>
-          <Text fontSize="sm" color="gray.600" mb={4}>per posting, {FEATURE_DAYS} days</Text>
+          <Heading size="xl" color="brand.500" mb={1}>{FEATURE_PRICE_DISPLAY}</Heading>
+          <Text fontSize="sm" color="gray.600" mb={1}>per posting, {FEATURE_DAYS} days</Text>
+          <Text fontSize="xs" color="gray.500" mb={4}>
+            Priced in USD. Converted to your local currency at checkout.
+          </Text>
 
           <Stack gap={2} mb={4}>
             {PRICING_BENEFITS.map((b) => (
