@@ -10,6 +10,7 @@ from app.core.limiter import limiter  # shared limiter, keyed on the real client
 from app.api.routes import (
     jobs, saved_jobs, promote, internal, job_alerts, companies,
     employer_jobs, contact, applicant_profile, employer_payment, chat, cv, wallet, ats, doc_builder, resume,
+    analytics,
 )
 
 app = FastAPI(title="PerchRole API")
@@ -43,6 +44,7 @@ app.include_router(job_alerts.router, prefix="/api/job-alerts", tags=["job-alert
 app.include_router(companies.router, prefix="/api/companies", tags=["companies"])
 app.include_router(employer_jobs.router, prefix="/api/employer/jobs", tags=["employer-jobs"])
 app.include_router(employer_payment.router, prefix="/api/employer/payment", tags=["employer-payment"])
+app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 app.include_router(contact.router, prefix="/api/contact", tags=["contact"])
 app.include_router(applicant_profile.router, prefix="/api/applicant/profile", tags=["applicant-profile"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
