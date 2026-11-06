@@ -37,7 +37,7 @@ const FAQS = [
   },
   {
     q: "What does a featured listing cost?",
-    a: "$49 per posting. It pins your job to the top of matching search results for 14 days. It is a one-time payment, not a subscription, processed securely by Stripe.",
+    a: "$49 per posting. It pins your job to the top of matching search results for 14 days. It is a one-time payment, not a subscription, processed securely by Paystack.",
   },
   {
     q: "Why can't I promote a listing?",
