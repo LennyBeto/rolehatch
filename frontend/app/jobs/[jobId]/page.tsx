@@ -3,9 +3,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import {
-  Box, Heading, Text, Badge, HStack, Button, Flex, Image, Wrap, Container,
+  Box, Heading, Text, Badge, HStack, Flex, Image, Wrap, Container,
 } from "@chakra-ui/react";
 import JobActions from "@/components/JobActions";
+import JobViewTracker from "@/components/JobViewTracker";
+import ApplyButton from "@/components/ApplyButton";
 
 type JobDetail = {
   id: string; title: string; location: string | null;
@@ -176,15 +178,16 @@ export default async function JobDetailPage(
       </Box>
 
       <HStack gap={3} mb={4}>
-        <Button asChild colorPalette="brand" size="lg">
-          <a href={job.source_url} target="_blank" rel="noopener noreferrer">
-            Apply on {job.company_name ?? "employer site"}
-          </a>
-        </Button>
+        <ApplyButton
+          jobId={job.id}
+          href={job.source_url}
+          label={`Apply on ${job.company_name ?? "employer site"}`}
+        />
       </HStack>
 
       {/* Save / Mark Applied / Hide remain gated behind sign-in inside JobActions */}
       <JobActions jobId={job.id} />
+      <JobViewTracker jobId={job.id} />
     </Container>
   );
 }
