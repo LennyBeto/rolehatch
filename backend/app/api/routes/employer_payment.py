@@ -1,9 +1,9 @@
 # backend/app/api/routes/employer_payment.py
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel, field_validator
@@ -14,13 +14,14 @@ from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.job import Company, Job
 from app.models.mpesa_transaction import MpesaTransaction
-from app.services import mpesa, paystack, feature_listing
+from app.services import mpesa, paystack, feature_listing, employer_mpesa
 
 logger = logging.getLogger("perchrole.employer_payment")
 router = APIRouter()
 
 FEATURE_PRICE_KES = feature_listing.FEATURE_PRICE_KES
 FEATURE_DAYS = feature_listing.FEATURE_DAYS
+ACK = {"ResultCode": 0, "ResultDesc": "Accepted"}
 
 
 def get_company_for_user(db: Session, user: dict) -> Company:
@@ -113,7 +114,9 @@ def verify_paystack(reference: str, user=Depends(get_current_user), db: Session 
 
     job_id = feature_listing.job_id_from(data)
     owned = (
-        db.query(Job.id).filter_by(id=job_id, company_id=company.id).first() if job_id else None
+        db.query(Job.id).filter(Job.id == job_id, Job.company_id == company.id).first()
+        if job_id
+        else None
     )
     if not owned:
         raise HTTPException(404, "Payment not found")
@@ -163,37 +166,20 @@ async def start_mpesa_stk_push(payload: MpesaStkRequest, user=Depends(get_curren
 
 
 @router.post("/mpesa/callback")
-async def mpesa_callback(request: Request, db: Session = Depends(get_db)):
-    """Daraja posts the STK result here — no auth header, Daraja doesn't support one.
-    Validate by matching CheckoutRequestID against a transaction we created."""
-    body = await request.json()
-    stk_callback = body.get("Body", {}).get("stkCallback", {})
-    checkout_request_id = stk_callback.get("CheckoutRequestID")
+async def mpesa_callback(request: Request, token: str = Query(""), db: Session = Depends(get_db)):
+    """Secret-gated like the wallet callbacks. Daraja's STK results actually arrive at the
+    wallet's /callbacks/stk (the single configured CallBackURL), which forwards employer
+    payments to the same employer_mpesa.apply_stk_result() used here."""
+    if not employer_mpesa.token_ok(token):
+        raise HTTPException(403, "Forbidden")
+    try:
+        stk_callback = (await request.json())["Body"]["stkCallback"]
+        checkout_request_id = stk_callback["CheckoutRequestID"]
+    except (ValueError, KeyError, TypeError):
+        return ACK
 
-    if not checkout_request_id:
-        return {"ResultCode": 0, "ResultDesc": "Ignored — no CheckoutRequestID"}
-
-    txn = db.query(MpesaTransaction).filter_by(checkout_request_id=checkout_request_id).first()
-    if not txn:
-        return {"ResultCode": 0, "ResultDesc": "Ignored — unknown transaction"}
-
-    result_code = stk_callback.get("ResultCode")
-    txn.result_desc = stk_callback.get("ResultDesc")
-
-    if result_code == 0:
-        items = {i["Name"]: i.get("Value") for i in stk_callback.get("CallbackMetadata", {}).get("Item", [])}
-        txn.status = "completed"
-        txn.mpesa_receipt_number = items.get("MpesaReceiptNumber")
-
-        if txn.job_id:
-            job = db.query(Job).filter_by(id=txn.job_id).first()
-            if job:
-                job.featured_until = datetime.now(timezone.utc) + timedelta(days=FEATURE_DAYS)
-    else:
-        txn.status = "failed" if result_code != 1032 else "cancelled"  # 1032 = user cancelled on phone
-
-    db.commit()
-    return {"ResultCode": 0, "ResultDesc": "Accepted"}
+    employer_mpesa.apply_stk_result(db, checkout_request_id, stk_callback)
+    return ACK
 
 
 @router.get("/mpesa/status/{checkout_request_id}")
@@ -210,12 +196,11 @@ async def get_mpesa_status(checkout_request_id: str, user=Depends(get_current_us
             result = await mpesa.query_stk_status(checkout_request_id)
             if result.get("ResultCode") == "0":
                 txn.status = "completed"
-                # Feature the listing here too, in case Daraja's callback never reaches us.
+                # Feature the listing here too, in case the callback hasn't arrived yet.
                 if txn.job_id:
                     job = db.query(Job).filter_by(id=txn.job_id).first()
-                    now = datetime.now(timezone.utc)
-                    if job and not (job.featured_until and job.featured_until > now):
-                        job.featured_until = now + timedelta(days=FEATURE_DAYS)
+                    if job:
+                        employer_mpesa.feature_job(job, datetime.now(timezone.utc))
                 db.commit()
             elif result.get("ResultCode") not in (None, "1037", "1032"):
                 txn.status = "failed"

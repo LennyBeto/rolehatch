@@ -19,7 +19,7 @@ from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.wallet import Wallet, WalletTransaction
 from app.schemas.wallet import DepositIn, BachsDepositIn, PaypalDepositIn, PaystackDepositIn, WithdrawIn
-from app.services import mpesa, bachs, paypal, paystack, ats_quota, doc_quota, feature_listing
+from app.services import mpesa, bachs, paypal, paystack, ats_quota, doc_quota, feature_listing, employer_mpesa  # ← changed
 
 logger = logging.getLogger("perchrole.wallet")
 router = APIRouter()
@@ -620,8 +620,13 @@ async def stk_callback(request: Request, token: str = Query(""), db: Session = D
     tx = db.execute(
         select(WalletTransaction).where(WalletTransaction.checkout_request_id == checkout_id).with_for_update()
     ).scalar_one_or_none()
-    if not tx or tx.type != "deposit" or tx.status != "pending":
-        return ACK  # unknown or already processed — idempotent
+    if not tx:
+        # Not a wallet top-up. This is the single CallBackURL configured for every STK push,
+        # so it may be an employer featured-listing payment.  # ← changed
+        employer_mpesa.apply_stk_result(db, checkout_id, cb)
+        return ACK
+    if tx.type != "deposit" or tx.status != "pending":
+        return ACK  # already processed — idempotent
 
     if result_code != 0:
         tx.status = "failed"
