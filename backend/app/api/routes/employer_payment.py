@@ -1,4 +1,5 @@
 # backend/app/api/routes/employer_payment.py
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -7,16 +8,19 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel, field_validator
 
+from app.core.config import settings
+from app.core.limiter import limiter
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.job import Company, Job
 from app.models.mpesa_transaction import MpesaTransaction
-from app.services import mpesa
+from app.services import mpesa, paystack, feature_listing
 
+logger = logging.getLogger("perchrole.employer_payment")
 router = APIRouter()
 
-FEATURE_PRICE_KES = 6500
-FEATURE_DAYS = 14
+FEATURE_PRICE_KES = feature_listing.FEATURE_PRICE_KES
+FEATURE_DAYS = feature_listing.FEATURE_DAYS
 
 
 def get_company_for_user(db: Session, user: dict) -> Company:
@@ -44,6 +48,80 @@ class MpesaStkRequest(BaseModel):
             raise ValueError(str(e))
 
 
+class PaystackFeatureRequest(BaseModel):
+    job_id: str
+
+
+# ── Paystack (card / bank / mobile money via hosted checkout) ──
+@router.post("/paystack/checkout")
+@limiter.limit("5/minute")
+def start_paystack_checkout(
+    request: Request,
+    payload: PaystackFeatureRequest,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not settings.paystack_secret_key:
+        raise HTTPException(503, "Paystack is not configured")
+    email = user.get("email")
+    if not email:
+        raise HTTPException(400, "Your account has no email address")
+
+    company = get_company_for_user(db, user)
+    try:
+        job_uuid = uuid.UUID(payload.job_id)
+    except ValueError:
+        raise HTTPException(404, "Job not found for your company")
+
+    job = db.query(Job).filter_by(id=job_uuid, company_id=company.id, is_active=True).first()
+    if not job:
+        raise HTTPException(404, "Job not found for your company")
+
+    now = datetime.now(timezone.utc)
+    if job.featured_until and job.featured_until > now:
+        raise HTTPException(409, "This listing is already featured")
+
+    reference = feature_listing.new_reference(job.id)
+    try:
+        data = paystack.initialize_transaction(
+            email=email,
+            amount_kes=feature_listing.FEATURE_PRICE_KES,
+            reference=reference,
+            callback_url=f"{settings.frontend_url}/promote/paystack-return",
+            user_id=user["sub"],
+            extra_metadata={"purpose": feature_listing.PURPOSE, "job_id": str(job.id)},
+        )
+    except paystack.PaystackError:
+        logger.exception("Paystack initialize failed for featured listing %s", job.id)
+        raise HTTPException(502, "Couldn't start Paystack checkout — please try again")
+    return {"authorization_url": data["authorization_url"], "reference": reference}
+
+
+@router.get("/paystack/verify/{reference}")
+def verify_paystack(reference: str, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Called when the employer returns from Paystack so the listing is featured before the
+    webhook lands. Shares settle() with the webhook, so it is safe to call repeatedly."""
+    if not reference.startswith(feature_listing.REFERENCE_PREFIX):
+        raise HTTPException(404, "Payment not found")
+    company = get_company_for_user(db, user)
+
+    try:
+        data = paystack.verify_transaction(reference)
+    except paystack.PaystackError:
+        logger.exception("Paystack verify failed for %s", reference)
+        raise HTTPException(502, "Couldn't verify payment — please try again")
+
+    job_id = feature_listing.job_id_from(data)
+    owned = (
+        db.query(Job.id).filter_by(id=job_id, company_id=company.id).first() if job_id else None
+    )
+    if not owned:
+        raise HTTPException(404, "Payment not found")
+
+    return {"status": feature_listing.settle(db, reference, data)}
+
+
+# ── M-Pesa (STK push) ────────────────────────────────────
 @router.post("/mpesa/stk-push")
 async def start_mpesa_stk_push(payload: MpesaStkRequest, user=Depends(get_current_user), db: Session = Depends(get_db)):
     company = get_company_for_user(db, user)
@@ -132,6 +210,12 @@ async def get_mpesa_status(checkout_request_id: str, user=Depends(get_current_us
             result = await mpesa.query_stk_status(checkout_request_id)
             if result.get("ResultCode") == "0":
                 txn.status = "completed"
+                # Feature the listing here too, in case Daraja's callback never reaches us.
+                if txn.job_id:
+                    job = db.query(Job).filter_by(id=txn.job_id).first()
+                    now = datetime.now(timezone.utc)
+                    if job and not (job.featured_until and job.featured_until > now):
+                        job.featured_until = now + timedelta(days=FEATURE_DAYS)
                 db.commit()
             elif result.get("ResultCode") not in (None, "1037", "1032"):
                 txn.status = "failed"
