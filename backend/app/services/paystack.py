@@ -17,7 +17,15 @@ def _headers() -> dict:
     return {"Authorization": f"Bearer {settings.paystack_secret_key}"}
 
 
-def initialize_transaction(*, email: str, amount_kes: int, reference: str, callback_url: str, user_id: str) -> dict:
+def initialize_transaction(
+    *,
+    email: str,
+    amount_kes: int,
+    reference: str,
+    callback_url: str,
+    user_id: str,
+    extra_metadata: dict | None = None,
+) -> dict:
     """amount_kes is whole KES; Paystack expects the smallest unit (x100)."""
     try:
         resp = httpx.post(
@@ -29,7 +37,7 @@ def initialize_transaction(*, email: str, amount_kes: int, reference: str, callb
                 "currency": "KES",
                 "reference": reference,
                 "callback_url": callback_url,
-                "metadata": {"user_id": user_id},
+                "metadata": {"user_id": user_id, **(extra_metadata or {})},
             },
             timeout=15,
         )
