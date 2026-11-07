@@ -47,6 +47,9 @@ export default function JobList() {
     const languages = searchParams.get("languages") ?? searchParams.get("language");
     const quickFilter = searchParams.get("quick_filter");
     const datePosted = searchParams.get("date_posted");
+    // Region / visa checkboxes in FilterSidebar (URL value "1" -> API boolean)
+    const openToAfrica = searchParams.get("open_to_africa");
+    const visaSponsorship = searchParams.get("visa_sponsorship");
 
     if (title) params.set("title", title);
     if (remoteType) params.set("remote_type", remoteType);
@@ -58,6 +61,8 @@ export default function JobList() {
     if (languages) params.set("languages", languages);
     if (quickFilter) params.set("quick_filter", quickFilter);
     if (datePosted) params.set("date_posted", datePosted);
+    if (openToAfrica === "1") params.set("open_to_africa", "true");
+    if (visaSponsorship === "1") params.set("visa_sponsorship", "true");
     params.set("page", String(currentPage));
     if (matchSort && signedIn) params.set("sort_by_match", "true");
 
@@ -175,7 +180,9 @@ export default function JobList() {
           textAlign="center"
           py={8}
           bg="surface"
-          border="1px dashed #E5E3DD"
+          borderWidth="1px"
+          borderStyle="dashed"
+          borderColor="line"
           borderRadius="lg"
         >
           <Text color="text" fontWeight="600" mb={1}>
