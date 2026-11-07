@@ -24,9 +24,9 @@ STATS_CACHE_TTL = 1800
 JOB_DETAIL_CACHE_TTL = 3600
 
 # Bumped so stale cached results are discarded (new remote_type values, salary range
-# semantics, title/tech matching, include_unlisted). cache.py invalidates with the
-# wildcard 'search*', so a future bump needs no other change.
-SEARCH_CACHE_PREFIX = "search_v5"
+# semantics, title/tech matching, include_unlisted, region/visa filters). cache.py
+# invalidates with the wildcard 'search*', so a future bump needs no other change.
+SEARCH_CACHE_PREFIX = "search_v6"
 
 SALARY_SLIDER_MAX = 300   # slider's top end ($k) — treated as "no upper limit"
 SHORT_TERM_LEN = 3        # terms this short match on word boundaries ("pm" != "development")
@@ -97,6 +97,8 @@ def build_search_query(
     salary_max: int | None = None,
     include_unlisted: bool = True,
     date_posted: str | None = None,
+    open_to_africa: bool = False,
+    visa_sponsorship: bool = False,
 ):
     q = (
         select(
@@ -188,6 +190,13 @@ def build_search_query(
     if date_posted and (window := DATE_POSTED_WINDOWS.get(date_posted)):
         q = q.where(Job.posted_at >= datetime.now(timezone.utc) - window)
 
+    # Region / visa: Postgres-generated columns (see models/job_region_sql.py), so these
+    # are plain boolean checks backed by partial indexes.
+    if open_to_africa:
+        q = q.where(Job.open_to_africa.is_(True))
+    if visa_sponsorship:
+        q = q.where(Job.visa_sponsorship.is_(True))
+
     if resume_embedding is not None:
         match_distance = Job.embedding.cosine_distance(resume_embedding)
         q = q.add_columns(match_distance.label("match_distance")).order_by(match_distance)
@@ -247,6 +256,8 @@ def search_jobs(
     language: str | None = None,    # legacy alias for `languages`
     quick_filter: str | None = None,
     date_posted: str | None = None,  # 24h, 3d, 1w, 2w, 3w, 3m, 4m, 5m, 6m, 1y, 2y
+    open_to_africa: bool = False,    # located in Africa, or remote and open to Africa
+    visa_sponsorship: bool = False,  # offers visa sponsorship / relocation
     sort_by_match: bool = False,
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
@@ -271,7 +282,9 @@ def search_jobs(
         "salary_max": salary_max, "include_unlisted": include_unlisted,
         "remote_type": remote_type,
         "languages": sorted(normalized_langs) or None,
-        "quick_filter": quick_filter, "date_posted": date_posted, "page": page,
+        "quick_filter": quick_filter, "date_posted": date_posted,
+        "open_to_africa": open_to_africa, "visa_sponsorship": visa_sponsorship,
+        "page": page,
     }
     use_cache = resume_embedding is None
     key = cache_key(SEARCH_CACHE_PREFIX, params)
@@ -281,7 +294,8 @@ def search_jobs(
     base_query = build_search_query(
         db, location, title, salary_min, remote_type, languages_csv, quick_filter,
         resume_embedding, salary_max=salary_max, include_unlisted=include_unlisted,
-        date_posted=date_posted,
+        date_posted=date_posted, open_to_africa=open_to_africa,
+        visa_sponsorship=visa_sponsorship,
     )
 
     count_query = select(func.count()).select_from(base_query.order_by(None).subquery())

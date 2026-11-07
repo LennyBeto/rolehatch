@@ -41,6 +41,9 @@ export default function FilterSidebar() {
   const selectedLanguages = (searchParams.get("languages") ?? searchParams.get("language"))
     ?.split(",").map((v) => v.trim().toLowerCase()).filter(Boolean) ?? [];
   const includeUnlisted = searchParams.get("hide_unlisted") !== "1";
+  // Param names match the API (/api/jobs/search) so they can be forwarded as-is
+  const openToAfrica = searchParams.get("open_to_africa") === "1";
+  const visaSponsorship = searchParams.get("visa_sponsorship") === "1";
 
   // URL is the source of truth once a change is committed.
   const urlMin = Number(searchParams.get("salary_min") ?? SALARY_MIN);
@@ -86,7 +89,7 @@ export default function FilterSidebar() {
   const maxLabel = shown[1] >= SALARY_MAX ? `$${SALARY_MAX}k+` : `$${shown[1]}k`;
 
   return (
-    <Box bg="surface" p={4} borderRadius="md" border="1px solid #E5E3DD">
+    <Box bg="surface" p={4} borderRadius="md" borderWidth="1px" borderColor="line">
       <Heading size="sm" mb={3}>Environment</Heading>
       <CheckboxGroup
         colorPalette="brand"
@@ -103,6 +106,31 @@ export default function FilterSidebar() {
           ))}
         </VStack>
       </CheckboxGroup>
+
+      <Heading size="sm" mb={3}>Region &amp; visa</Heading>
+      <VStack gap={2} mb={1} align="stretch">
+        <Checkbox.Root
+          colorPalette="brand"
+          checked={openToAfrica}
+          onCheckedChange={(e) => updateParams({ open_to_africa: e.checked === true ? "1" : null })}
+        >
+          <Checkbox.HiddenInput />
+          <Checkbox.Control />
+          <Checkbox.Label>Open to Africa</Checkbox.Label>
+        </Checkbox.Root>
+        <Checkbox.Root
+          colorPalette="brand"
+          checked={visaSponsorship}
+          onCheckedChange={(e) => updateParams({ visa_sponsorship: e.checked === true ? "1" : null })}
+        >
+          <Checkbox.HiddenInput />
+          <Checkbox.Control />
+          <Checkbox.Label>Visa sponsorship / relocation</Checkbox.Label>
+        </Checkbox.Root>
+      </VStack>
+      <Text fontSize="xs" color="gray.600" mb={5}>
+        Detected from each listing&apos;s location and description. Confirm with the employer.
+      </Text>
 
       <Heading size="sm" mb={3}>Languages</Heading>
       <CheckboxGroup
