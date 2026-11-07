@@ -1,0 +1,59 @@
+"""add open_to_africa and visa_sponsorship generated columns to jobs"""
+from alembic import op
+
+revision = "20261106_job_regions"
+down_revision = "20261105_job_daily_stats"
+branch_labels = None
+depends_on = None
+
+# ── frozen copy of app/models/job_region_sql.py ──────────────────────────
+AFRICA_PLACES = (
+    r"\m(africa|kenya|nigeria|ghana|uganda|tanzania|rwanda|ethiopia|egypt|morocco|tunisia|"
+    r"algeria|senegal|cameroon|zambia|zimbabwe|botswana|namibia|mauritius|ivory coast|"
+    r"nairobi|lagos|abuja|accra|kigali|kampala|cairo|casablanca|johannesburg|cape town|"
+    r"durban|pretoria|dar es salaam|addis ababa|tunis|dakar|abidjan|lusaka|harare|"
+    r"gaborone|windhoek)\M"
+)
+WORLDWIDE_LOC = r"\m(worldwide|world.?wide|anywhere|global|globally)\M"
+AFRICA_DESC = (
+    r"(work(ing)? from anywhere|anywhere in the world|"
+    r"(open|hiring|candidates?|applicants?|applications?)[^.]{0,40}\mafrica\M|"
+    r"\mafrica\M[^.]{0,40}(remote|time ?zone|candidates?)|"
+    r"remote[^.]{0,20}\m(worldwide|globally|anywhere)\M)"
+)
+VISA_POS = (
+    r"((visa|work permit)[^.]{0,25}sponsor|sponsor[^.]{0,25}(visa|work permit)|"
+    r"relocation (assistance|support|package|allowance|bonus)|we (will )?provide visa)"
+)
+VISA_NEG = (
+    r"\m(no|not|unable to|cannot|can.t|won.t|without|doesn.t|does not|do not|don.t|"
+    r"will not|not able to)\M[^.]{0,30}(visa|sponsor)"
+)
+
+_LOC = "lower(coalesce(location, ''))"
+_DESC = "lower(coalesce(description, ''))"
+_REMOTE = f"(lower(coalesce(remote_type, '')) = 'remote' OR {_LOC} ~ '\\mremote\\M')"
+
+OPEN_TO_AFRICA_SQL = (
+    f"({_LOC} ~ '{AFRICA_PLACES}') OR ({_REMOTE} AND "
+    f"({_LOC} ~ '{WORLDWIDE_LOC}' OR {_DESC} ~ '{AFRICA_DESC}'))"
+)
+VISA_SPONSORSHIP_SQL = f"({_DESC} ~ '{VISA_POS}') AND NOT ({_DESC} ~ '{VISA_NEG}')"
+
+
+def upgrade() -> None:
+    # Adding a STORED generated column rewrites the table once (brief exclusive lock).
+    # Existing rows are populated automatically; later inserts/updates keep them current.
+    op.execute(
+        "ALTER TABLE jobs "
+        f"ADD COLUMN open_to_africa boolean GENERATED ALWAYS AS ({OPEN_TO_AFRICA_SQL}) STORED, "
+        f"ADD COLUMN visa_sponsorship boolean GENERATED ALWAYS AS ({VISA_SPONSORSHIP_SQL}) STORED"
+    )
+    op.execute("CREATE INDEX ix_jobs_open_to_africa ON jobs (id) WHERE open_to_africa")
+    op.execute("CREATE INDEX ix_jobs_visa_sponsorship ON jobs (id) WHERE visa_sponsorship")
+
+
+def downgrade() -> None:
+    op.execute("DROP INDEX IF EXISTS ix_jobs_visa_sponsorship")
+    op.execute("DROP INDEX IF EXISTS ix_jobs_open_to_africa")
+    op.execute("ALTER TABLE jobs DROP COLUMN IF EXISTS visa_sponsorship, DROP COLUMN IF EXISTS open_to_africa")
