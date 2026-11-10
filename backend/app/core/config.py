@@ -190,6 +190,26 @@ class Settings(BaseSettings):
         alias="BACHS_KES_PER_USD",
     )
 
+    # ── Employer monthly plans (Paystack subscriptions, USD) ──
+    # Create each plan in the Paystack dashboard (monthly, USD) and paste its PLN_ code.
+    # An empty code makes that plan return 503 on subscribe, so plans can go live one at a time.
+    paystack_plan_starter: str = Field(default="", description="Paystack plan code, Starter $29/mo", alias="PAYSTACK_PLAN_STARTER")
+    paystack_plan_growth: str = Field(default="", description="Paystack plan code, Growth $99/mo", alias="PAYSTACK_PLAN_GROWTH")
+    paystack_plan_enterprise: str = Field(default="", description="Paystack plan code, Enterprise $249/mo", alias="PAYSTACK_PLAN_ENTERPRISE")
+
+    # ── Newsletter (Resend) ──────────────────────────────────
+    resend_api_key: str = Field(default="", description="Resend API key; empty disables newsletter sending", alias="RESEND_API_KEY")
+    newsletter_from: str = Field(
+        default="PerchRole <newsletter@perchrole.com>",
+        description="From address for newsletter email (domain must be verified in Resend)",
+        alias="NEWSLETTER_FROM",
+    )
+    api_base_url: str = Field(
+        default="https://api.perchrole.com",
+        description="Public API base URL, used for one-click unsubscribe links",
+        alias="API_BASE_URL",
+    )
+
     @field_validator("frontend_url")
     @classmethod
     def normalize_frontend_url(cls, v):
