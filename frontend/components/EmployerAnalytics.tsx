@@ -2,7 +2,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Box, Button, Flex, Heading, SimpleGrid, Text } from "@chakra-ui/react";
+import NextLink from "next/link";
+import { LuLock } from "react-icons/lu";
+import { Box, Button, Flex, Heading, Link as ChakraLink, SimpleGrid, Text } from "@chakra-ui/react";
+import { EMPLOYER_PLANS, EMPLOYER_PLAN_ORDER } from "@/lib/pricing";
 
 type Day = { day: string; views: number; apply_clicks: number };
 type Listing = { id: string; title: string; views: number; apply_clicks: number };
@@ -18,6 +21,13 @@ const API = process.env.NEXT_PUBLIC_API_URL;
 
 const rate = (views: number, clicks: number) =>
   views > 0 ? `${Math.round((clicks / views) * 100)}%` : "–";
+
+// Widest preset that fits inside the plan's analytics window.
+const maxRange = (days: number): number => [...RANGES].filter((r) => r <= days).pop() ?? RANGES[0];
+
+// Cheapest plan whose window covers `days` (used in the upgrade hint).
+const planFor = (days: number): string | undefined =>
+  EMPLOYER_PLAN_ORDER.map((id) => EMPLOYER_PLANS[id]).find((p) => p.limits.analyticsDays >= days)?.name;
 
 function Tile({ label, value }: { label: string; value: string }) {
   return (
@@ -49,11 +59,41 @@ export default function EmployerAnalytics({ accessToken }: { accessToken?: strin
   const [range, setRange] = useState<number>(14);
   const [data, setData] = useState<Summary | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+
+  // Widest window this employer's plan allows. null = unknown (nothing is locked in the UI;
+  // the backend is what actually enforces the limit).
+  const [allowedDays, setAllowedDays] = useState<number | null>(null);
+  const [accessReady, setAccessReady] = useState(false);
 
   useEffect(() => {
     if (!accessToken) return;
     const ctrl = new AbortController();
+    fetch(`${API}/api/promote/entitlements`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: ctrl.signal,
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
+      .then((json: { analytics_days?: number }) => {
+        const days = typeof json.analytics_days === "number" ? json.analytics_days : null;
+        setAllowedDays(days);
+        if (days !== null) setRange((current) => Math.min(current, maxRange(days)));
+        setAccessReady(true);
+      })
+      .catch((e) => {
+        if (e?.name !== "AbortError") setAccessReady(true);
+      });
+    return () => ctrl.abort();
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (!accessToken || !accessReady) return;
+    const ctrl = new AbortController();
     setStatus("loading");
+    setErrorCode(null);
     fetch(`${API}/api/analytics/employer/summary?days=${range}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: ctrl.signal,
@@ -67,13 +107,24 @@ export default function EmployerAnalytics({ accessToken }: { accessToken?: strin
         setStatus("ready");
       })
       .catch((e) => {
-        if (e?.name !== "AbortError") setStatus("error");
+        if (e?.name === "AbortError") return;
+        setErrorCode(/^\d+$/.test(e?.message ?? "") ? e.message : null);
+        setStatus("error");
       });
     return () => ctrl.abort();
-  }, [accessToken, range]);
+  }, [accessToken, accessReady, range]);
 
   const max = data ? Math.max(1, ...data.series.map((d) => Math.max(d.views, d.apply_clicks))) : 1;
   const hasActivity = !!data && (data.totals.views > 0 || data.totals.apply_clicks > 0);
+
+  const lockedAny = allowedDays !== null && RANGES.some((r) => r > allowedDays);
+  const upgradePlans =
+    allowedDays === null
+      ? ""
+      : EMPLOYER_PLAN_ORDER.map((id) => EMPLOYER_PLANS[id])
+          .filter((p) => p.limits.analyticsDays > allowedDays)
+          .map((p) => p.name)
+          .join(" and ");
 
   return (
     <Box
@@ -86,7 +137,7 @@ export default function EmployerAnalytics({ accessToken }: { accessToken?: strin
       p={{ base: 4, md: 6 }}
       mb={6}
     >
-      <Flex justify="space-between" align="flex-start" gap={3} wrap="wrap" mb={4}>
+      <Flex justify="space-between" align="flex-start" gap={3} wrap="wrap" mb={lockedAny ? 2 : 4}>
         <Box minW={0}>
           <Heading as="h2" id="employer-analytics-title" size="md" color="text">
             Listing performance
@@ -97,6 +148,19 @@ export default function EmployerAnalytics({ accessToken }: { accessToken?: strin
         </Box>
         <Flex gap={1} role="group" aria-label="Date range">
           {RANGES.map((r) => {
+            const locked = allowedDays !== null && r > allowedDays;
+            if (locked) {
+              return (
+                <Button key={r} asChild size="sm" colorPalette="brand" variant="outline">
+                  <NextLink
+                    href="/pricing"
+                    aria-label={`${r} days: available on ${planFor(r) ?? "a higher plan"}. See plans`}
+                  >
+                    {r} days <LuLock aria-hidden="true" />
+                  </NextLink>
+                </Button>
+              );
+            }
             const active = r === range;
             return (
               <Button
@@ -114,9 +178,23 @@ export default function EmployerAnalytics({ accessToken }: { accessToken?: strin
         </Flex>
       </Flex>
 
+      {lockedAny && (
+        <Text fontSize="xs" color="text" opacity={0.7} mb={4}>
+          Longer history is available on {upgradePlans}.{" "}
+          <ChakraLink asChild color="brand.fg" textDecoration="underline">
+            <NextLink href="/pricing">See plans</NextLink>
+          </ChakraLink>
+        </Text>
+      )}
+
       {status === "error" && (
         <Text role="alert" fontSize="sm" color="text">
           Couldn’t load your stats. Refresh the page, or try again in a minute.
+          {errorCode && (
+            <Text as="span" display="block" fontSize="xs" opacity={0.7} mt={1}>
+              Error {errorCode}
+            </Text>
+          )}
         </Text>
       )}
 
