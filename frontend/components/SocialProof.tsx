@@ -1,10 +1,11 @@
 // frontend/components/SocialProof.tsx
 "use client";
 import { Box, Text, HStack, Image, Flex, VisuallyHidden } from "@chakra-ui/react";
+import NextLink from "next/link";
 import { useEffect, useState } from "react";
 import Shimmer from "@/components/ui/shimmer";
 
-type Company = { name: string; domain: string | null };
+type Company = { name: string; domain: string | null; partner?: boolean };
 type Stats = { total_jobs: number; total_companies: number };
 
 async function getJson<T>(baseUrl: string, path: string): Promise<T> {
@@ -101,17 +102,35 @@ export default function SocialProof() {
       )}
       {visibleCompanies.length > 0 && (
         <HStack justify="center" gap={8} flexWrap="wrap" px={4}>
-          {visibleCompanies.map((c) => (
-            <Image
-              key={c.name}
-              src={`https://www.google.com/s2/favicons?domain=${c.domain}&sz=64`}
-              alt={c.name}
-              boxSize="32px"
-              opacity={0.7}
-              title={c.name}
-              onError={() => setFailedLogos((prev) => new Set(prev).add(c.name))}
-            />
-          ))}
+          {visibleCompanies.map((c) => {
+            const logo = (
+              <Image
+                src={`https://www.google.com/s2/favicons?domain=${c.domain}&sz=64`}
+                alt={c.name}
+                boxSize="32px"
+                opacity={0.7}
+                title={c.name}
+                _hover={c.partner ? { opacity: 1 } : undefined}
+                onError={() => setFailedLogos((prev) => new Set(prev).add(c.name))}
+              />
+            );
+
+            // Enterprise hiring partners link to their company page; other logos stay plain.
+            return c.partner ? (
+              <Box
+                key={c.name}
+                asChild
+                borderRadius="md"
+                _focusVisible={{ outline: "2px solid", outlineColor: "brand.fg", outlineOffset: "2px" }}
+              >
+                <NextLink href={`/companies/${c.domain}`} aria-label={`${c.name} jobs`}>
+                  {logo}
+                </NextLink>
+              </Box>
+            ) : (
+              <Box key={c.name}>{logo}</Box>
+            );
+          })}
         </HStack>
       )}
     </Box>

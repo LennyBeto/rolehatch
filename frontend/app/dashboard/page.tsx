@@ -304,22 +304,29 @@ export default function EmployerDashboard() {
                 {plan.status === "active" ? "Renews" : "Access ends"} {formatDate(plan.current_period_end)}
               </Text>
             </Box>
-            {plan.status === "active" && (
-              <Button
-                size="sm"
-                variant="outline"
-                colorPalette="brand"
-                loading={cancelling}
-                onClick={cancelPlan}
-              >
-                Cancel plan
-              </Button>
-            )}
-            {plan.newsletter && (
-              <Button asChild size="sm" variant="outline" colorPalette="brand" borderRadius="full">
-                <Link href="/dashboard/newsletter">Newsletter feature</Link>
-              </Button>
-            )}
+            <HStack gap={2} wrap="wrap">
+              {plan.company_page && (
+                <Button asChild size="sm" colorPalette="brand" borderRadius="full">
+                  <Link href="/dashboard/company">Edit company page</Link>
+                </Button>
+              )}
+              {plan.newsletter && (
+                <Button asChild size="sm" variant="outline" colorPalette="brand" borderRadius="full">
+                  <Link href="/dashboard/newsletter">Newsletter feature</Link>
+                </Button>
+              )}
+              {plan.status === "active" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  colorPalette="brand"
+                  loading={cancelling}
+                  onClick={cancelPlan}
+                >
+                  Cancel plan
+                </Button>
+              )}
+            </HStack>
           </Flex>
         </Box>
       )}

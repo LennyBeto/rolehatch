@@ -41,6 +41,8 @@ export function getLivePaymentMethods(): PaymentMethodKey[] {
 // which is what actually enforces them.
 // Keep `live: false` until subscription checkout is tested; the card then shows a
 // disabled "Coming soon" button.
+// A perk set to "soon" shows a Soon badge on the cards and in the comparison table;
+// set it to "included" once the feature is deployed.
 
 export type EmployerPlanId = "starter" | "growth" | "enterprise";
 
@@ -95,11 +97,7 @@ function buildFeatures(limits: PlanLimits, perks: Record<PerkKey, PerkState>): P
   ];
   (Object.keys(PERK_LABELS) as PerkKey[]).forEach((key) => {
     if (perks[key] !== "none") {
-      features.push(
-        key === "newsletter"
-          ? { text: PERK_LABELS[key] }
-          : { text: PERK_LABELS[key], soon: perks[key] === "soon" },
-      );
+      features.push({ text: PERK_LABELS[key], soon: perks[key] === "soon" });
     }
   });
   return features;
@@ -164,7 +162,7 @@ export const EMPLOYER_PLANS: Record<EmployerPlanId, EmployerPlan> = {
       supportLabel: "Dedicated account contact",
       supportResponse: "1 business day",
     },
-    perks: { partnerLogo: "included", companyPage: "soon", newsletter: "soon" },
+    perks: { partnerLogo: "included", companyPage: "included", newsletter: "included" },
     live: false,
   }),
 };
