@@ -95,7 +95,11 @@ function buildFeatures(limits: PlanLimits, perks: Record<PerkKey, PerkState>): P
   ];
   (Object.keys(PERK_LABELS) as PerkKey[]).forEach((key) => {
     if (perks[key] !== "none") {
-      features.push({ text: PERK_LABELS[key], soon: perks[key] === "soon" });
+      features.push(
+        key === "newsletter"
+          ? { text: PERK_LABELS[key] }
+          : { text: PERK_LABELS[key], soon: perks[key] === "soon" },
+      );
     }
   });
   return features;

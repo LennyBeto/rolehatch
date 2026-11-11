@@ -9,6 +9,7 @@ import FilterSidebar from "@/components/FilterSidebar";
 import MobileFilters from "@/components/MobileFilters";
 import JobList from "@/components/JobList";
 import JobAlertForm from "@/components/JobAlertForm";
+import NewsletterSignup from "@/components/NewsletterSignup";
 import EmployerPricingPreview from "@/components/EmployerPricingPreview";
 import HomeSkeleton from "@/components/HomeSkeleton";
 import JsonLd from "@/components/JsonLd";
@@ -79,6 +80,7 @@ export default function HomePage() {
           </Box>
         </Flex>
         <JobAlertForm />
+        <NewsletterSignup /> 
         <EmployerPricingPreview />
       </Suspense>
     </Box>

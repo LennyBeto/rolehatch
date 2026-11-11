@@ -315,6 +315,11 @@ export default function EmployerDashboard() {
                 Cancel plan
               </Button>
             )}
+            {plan.newsletter && (
+              <Button asChild size="sm" variant="outline" colorPalette="brand" borderRadius="full">
+                <Link href="/dashboard/newsletter">Newsletter feature</Link>
+              </Button>
+            )}
           </Flex>
         </Box>
       )}
