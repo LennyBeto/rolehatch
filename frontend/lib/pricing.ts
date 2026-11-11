@@ -163,7 +163,7 @@ export const EMPLOYER_PLANS: Record<EmployerPlanId, EmployerPlan> = {
       supportResponse: "1 business day",
     },
     perks: { partnerLogo: "included", companyPage: "included", newsletter: "included" },
-    live: false,
+    live: true,
   }),
 };
 
