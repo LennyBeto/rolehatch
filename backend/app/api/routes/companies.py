@@ -32,9 +32,19 @@ def _company_by_domain(db: Session, domain: str) -> Company | None:
 
 
 def _has_company_page(db: Session, domain: str) -> bool:
-    """True while the domain has a live plan that includes the company page."""
+    """True while the domain has a live plan that includes the company page.
+
+    .get() so a plan id that no longer exists in PLANS degrades to "no company page"
+    instead of a 500 on a public page."""
     sub = billing.live_subscription(db, domain)
-    return bool(sub and billing.PLANS[sub.plan_id]["company_page"])
+    if not sub:
+        return False
+    return bool(billing.PLANS.get(sub.plan_id, {}).get("company_page"))
+
+
+def _partner_plan_ids() -> list[str]:
+    """Plans that include the homepage hiring-partner logo (driven by billing.PLANS)."""
+    return [plan_id for plan_id, plan in billing.PLANS.items() if plan.get("partner_logo")]
 
 
 def _profile_dict(profile: CompanyProfile | None) -> dict:
@@ -68,11 +78,11 @@ def _job_dict(j: Job, company: Company, now: datetime) -> dict:
 def get_featured_companies(db: Session = Depends(get_db)):
     now = datetime.now(timezone.utc)
 
-    # Enterprise plan holders get a homepage partner logo.
+    # Plans with the partner-logo perk (Enterprise today) get a homepage logo while paid.
     partner_domains = [
         s.email_domain
         for s in db.query(EmployerSubscription).filter(
-            EmployerSubscription.plan_id == "enterprise",
+            EmployerSubscription.plan_id.in_(_partner_plan_ids()),
             EmployerSubscription.status.in_(["active", "cancelled"]),
             EmployerSubscription.current_period_end > now,
         ).all()
