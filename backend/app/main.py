@@ -10,7 +10,7 @@ from app.core.limiter import limiter  # shared limiter, keyed on the real client
 from app.api.routes import (
     jobs, saved_jobs, promote, internal, job_alerts, companies,
     employer_jobs, contact, applicant_profile, employer_payment, chat, cv, wallet, ats, doc_builder, resume,
-    analytics,
+    analytics, newsletter,
 )
 
 app = FastAPI(title="PerchRole API")
@@ -53,6 +53,8 @@ app.include_router(wallet.router, prefix="/api/wallet", tags=["wallet"])
 app.include_router(ats.router, prefix="/api/ats", tags=["ats"])
 app.include_router(doc_builder.router, prefix="/api/documents", tags=["documents"])
 app.include_router(resume.router, prefix="/api/resume", tags=["resume"])
+app.include_router(newsletter.router, prefix="/api/newsletter", tags=["newsletter"])
+app.include_router(newsletter.admin_router, prefix="/internal/newsletter", tags=["newsletter-admin"])
 app.include_router(internal.router)  # no prefix: route already defines /internal/sync-jobs
 
 
