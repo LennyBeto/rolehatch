@@ -19,8 +19,6 @@ from app.models.ats_scan import ATSScanQuota, ATSScanPayment  # noqa
 from app.models.doc_builder import DocBuilderQuota, DocBuilderConsumption, DocBuilderPayment  # noqa
 from app.models.billing import EmployerSubscription, ProcessedPayment  # noqa
 from app.models.company_profile import CompanyProfile  # noqa
-# Uncomment once backend/app/models/newsletter.py exists (newsletter step):
-from app.models.newsletter import NewsletterSubscriber, NewsletterSlot, NewsletterIssue  # noqa
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
