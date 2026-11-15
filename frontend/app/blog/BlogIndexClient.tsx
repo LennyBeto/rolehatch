@@ -3,6 +3,7 @@
 import { Box, Heading, Text, SimpleGrid, Badge, HStack, Link as ChakraLink } from "@chakra-ui/react";
 import NextLink from "next/link";
 import { BLOG_POSTS, readingTime } from "@/lib/blogPosts";
+import BlogVisual from "@/components/BlogVisual";
 
 export default function BlogIndexClient() {
   const posts = BLOG_POSTS.slice().sort(
@@ -13,7 +14,7 @@ export default function BlogIndexClient() {
     <Box bg="background" minH="100vh">
       <Box maxW="1000px" mx="auto" px={4} py={12}>
         <Heading size="lg" color="text" mb={2}>PerchRole Blog</Heading>
-        <Text color="gray.600" mb={10}>Notes on job search, hiring, and how PerchRole works.</Text>
+        <Text color="fg.muted" mb={10}>Notes on job search, hiring, and how PerchRole works.</Text>
 
         <SimpleGrid columns={{ base: 1, md: 2 }} gap={6}>
           {posts.map((post) => (
@@ -22,7 +23,9 @@ export default function BlogIndexClient() {
               asChild
               display="block"
               h="100%"
+              borderRadius="lg"
               _hover={{ textDecoration: "none" }}
+              _focusVisible={{ outline: "2px solid", outlineColor: "brand.fg", outlineOffset: "3px" }}
             >
               <NextLink href={`/blog/${post.slug}`}>
                 <Box
@@ -32,15 +35,24 @@ export default function BlogIndexClient() {
                   display="flex"
                   flexDirection="column"
                   borderRadius="lg"
-                  border="1px solid #E5E3DD"
+                  borderWidth="1px"
                   transition="box-shadow 0.15s ease, transform 0.15s ease"
-                  _hover={{ boxShadow: "0 4px 16px rgba(0,0,0,0.08)", transform: "translateY(-2px)" }}
+                  _hover={{ boxShadow: "md", transform: "translateY(-2px)" }}
+                  css={{
+                    "@media (prefers-reduced-motion: reduce)": {
+                      transition: "none",
+                      "&:hover": { transform: "none" },
+                    },
+                  }}
                 >
+                  <Box mb={4}>
+                    <BlogVisual flow={post.flow} variant="thumb" alt={post.coverAlt} src={post.coverImage} />
+                  </Box>
                   <HStack justify="space-between" mb={3}>
                     <Badge colorPalette="brand" variant="subtle">{post.category}</Badge>
-                    <Text fontSize="xs" color="gray.500">{readingTime(post.content)}</Text>
+                    <Text fontSize="xs" color="fg.muted">{readingTime(post.content)}</Text>
                   </HStack>
-                  <Text fontSize="xs" color="gray.500" mb={2}>
+                  <Text fontSize="xs" color="fg.muted" mb={2}>
                     {new Date(post.publishedAt).toLocaleDateString("en-US", {
                       year: "numeric",
                       month: "long",
@@ -48,8 +60,8 @@ export default function BlogIndexClient() {
                     })}
                   </Text>
                   <Heading size="md" color="text" mb={2}>{post.title}</Heading>
-                  <Text color="gray.600" fontSize="sm" flex={1}>{post.excerpt}</Text>
-                  <Text color="brand.500" fontSize="sm" fontWeight="600" mt={4}>Read more →</Text>
+                  <Text color="fg.muted" fontSize="sm" flex={1}>{post.excerpt}</Text>
+                  <Text color="brand.fg" fontSize="sm" fontWeight="600" mt={4}>Read more →</Text>
                 </Box>
               </NextLink>
             </ChakraLink>
