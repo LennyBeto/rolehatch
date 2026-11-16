@@ -24,6 +24,10 @@ const display = localFont({
 
 // Note: no canonical/url here. Child metadata inherits these keys, so a root
 // canonical would point every page at "/". Each page sets its own alternates.
+//
+// Icons: intentionally NOT set here. Next picks up app/favicon.ico, app/icon.svg,
+// app/icon.png and app/apple-icon.png automatically. An explicit `icons` entry
+// would override them, so leave it out.
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: SITE_TITLE,
@@ -62,7 +66,6 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-  icons: { icon: "/logo.svg" },
 };
 
 // Metadata can't read theme tokens, so brand values are set here directly:
@@ -76,6 +79,32 @@ export const viewport: Viewport = {
   ],
 };
 
+// Tells search engines which image is the PerchRole brand logo.
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${SITE_URL}/#organization`,
+      name: SITE_NAME,
+      url: SITE_URL,
+      logo: {
+        "@type": "ImageObject",
+        url: `${SITE_URL}/logo-512.png`,
+        width: 512,
+        height: 512,
+      },
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      name: SITE_NAME,
+      url: SITE_URL,
+      publisher: { "@id": `${SITE_URL}/#organization` },
+    },
+  ],
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
@@ -84,6 +113,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
         <Providers>
           <a
             href="#main-content"
