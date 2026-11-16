@@ -3,6 +3,7 @@
 import { Box, Heading, Text, Stack, Button, Input, HStack, Badge, Flex, SimpleGrid } from "@chakra-ui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { LuLock } from "react-icons/lu";
 import { useAuth } from "@/lib/AuthContext";
 import { authedFetch } from "@/lib/api";
 import { toaster } from "@/components/ui/toaster";
@@ -17,6 +18,10 @@ type WalletData = { balance: number; currency: string; phone_masked: string | nu
 const MIN_AMOUNT = 10;
 const MAX_AMOUNT = 150000;
 const TX_PAGE_SIZE = 8;
+
+// Beta lock: while true, the Bachs card is visible but inaccessible (shows "Coming soon").
+// Set to false to unlock Bachs deposits.
+const BACHS_LOCKED = true;
 
 const fmt = (amount: number, currency = "KES") =>
   new Intl.NumberFormat("en-KE", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
@@ -161,6 +166,15 @@ export default function WalletPage() {
       type: "error",
     });
 
+  // Fixed id so repeated clicks update one toast instead of stacking several.
+  const notifyBachsLocked = () =>
+    toaster.create({
+      id: "bachs-coming-soon",
+      title: "Bachs is coming soon",
+      description: "Bachs deposits are in beta and will open shortly. M-Pesa and Paystack are available now.",
+      type: "info",
+    });
+
   const depositMpesa = () => {
     if (!validAmount(mpesaAmt)) {
       notifyInvalidAmount();
@@ -207,6 +221,11 @@ export default function WalletPage() {
   };
 
   const depositBachs = () => {
+    // Beta lock: never reach the Bachs API while locked.
+    if (BACHS_LOCKED) {
+      notifyBachsLocked();
+      return;
+    }
     if (!validAmount(bachsAmt)) {
       notifyInvalidAmount();
       return;
@@ -274,7 +293,11 @@ export default function WalletPage() {
   return (
     <Box maxW="1200px" mx="auto" mt={12} px={4}>
       <Heading size="lg" mb={1}>Wallet</Heading>
-      <Text color="gray.600" mb={6}>Add funds with M-Pesa, card/bank, or Bachs. Withdraw to M-Pesa.</Text>
+      <Text color="gray.600" mb={6}>
+        {BACHS_LOCKED
+          ? "Add funds with M-Pesa or card/bank. Bachs is coming soon. Withdraw to M-Pesa."
+          : "Add funds with M-Pesa, card/bank, or Bachs. Withdraw to M-Pesa."}
+      </Text>
 
       <Box p={5} bg="surface" border="1px solid #E5E3DD" borderRadius="lg" mb={6}>
         <Text fontSize="sm" color="gray.600">Available balance</Text>
@@ -350,32 +373,70 @@ export default function WalletPage() {
           </Stack>
         </Box>
 
-        {/* ── Bachs card ── */}
-        <Box p={5} bg="surface" border="1px solid #E5E3DD" borderRadius="lg" h="100%">
+        {/* ── Bachs card (locked while BACHS_LOCKED = true) ── */}
+        <Box
+          p={5}
+          bg="surface"
+          border={BACHS_LOCKED ? "1px dashed #E5E3DD" : "1px solid #E5E3DD"}
+          borderRadius="lg"
+          h="100%"
+          cursor={BACHS_LOCKED ? "not-allowed" : undefined}
+          onClick={BACHS_LOCKED ? notifyBachsLocked : undefined}
+        >
           <Flex justify="space-between" align="center" mb={1} gap={2}>
             <Heading size="md">Bachs</Heading>
-            <Badge colorPalette="orange" variant="subtle">Deposit only</Badge>
+            {BACHS_LOCKED ? (
+              <Badge
+                variant="outline"
+                color="brand.fg"
+                borderColor="brand.fg"
+                borderRadius="full"
+                px={2.5}
+                display="inline-flex"
+                alignItems="center"
+                gap={1}
+                flexShrink={0}
+              >
+                <LuLock aria-hidden="true" /> Coming soon
+              </Badge>
+            ) : (
+              <Badge colorPalette="brand" variant="subtle">Deposit only</Badge>
+            )}
           </Flex>
-          <Text fontSize="sm" color="gray.600" mb={4}>
-            Pay by card, bank transfer, mobile money or crypto on Bachs's hosted checkout. Priced in USD.
-          </Text>
 
-          <Heading size="xs" textTransform="uppercase" color="gray.500" mb={2}>Deposit</Heading>
-          <Stack gap={3}>
-            <HStack>
-              <Input flex="1" minW={0} type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1}
-                placeholder="Amount (KES)" value={bachsAmt} onChange={(e) => setBachsAmt(e.target.value)} />
-              <Button colorPalette="brand" onClick={depositBachs} loading={busy === "bachs-deposit"}
-                disabled={!bachsAmt} flexShrink={0}>
-                Pay
-              </Button>
-            </HStack>
-            <Text fontSize="xs" color="gray.500">
-              {bachsUsdPreview
-                ? `Priced at $${bachsUsdPreview} USD (1 USD ≈ KES ${bachsRate}); you can pay in your local currency at checkout. Your wallet is credited ${fmt(Number(bachsAmt))}.`
-                : "Amounts are priced in USD. You'll be redirected to Bachs to pay, then brought back here."}
+          <Box opacity={BACHS_LOCKED ? 0.6 : 1} pointerEvents={BACHS_LOCKED ? "none" : undefined}>
+            <Text fontSize="sm" color="gray.600" mb={4}>
+              Pay by card, bank transfer, mobile money or crypto on Bachs's hosted checkout. Priced in USD.
             </Text>
-          </Stack>
+
+            <Heading size="xs" textTransform="uppercase" color="gray.500" mb={2}>Deposit</Heading>
+            <Stack gap={3}>
+              <HStack>
+                <Input flex="1" minW={0} type="number" min={MIN_AMOUNT} max={MAX_AMOUNT} step={1}
+                  placeholder="Amount (KES)" value={bachsAmt} onChange={(e) => setBachsAmt(e.target.value)}
+                  disabled={BACHS_LOCKED} />
+                <Button
+                  colorPalette="brand"
+                  onClick={depositBachs}
+                  loading={busy === "bachs-deposit"}
+                  disabled={BACHS_LOCKED ? false : !bachsAmt}
+                  aria-disabled={BACHS_LOCKED || undefined}
+                  aria-label={BACHS_LOCKED ? "Bachs deposits are locked, coming soon" : undefined}
+                  flexShrink={0}
+                  pointerEvents="auto"
+                >
+                  {BACHS_LOCKED ? (<><LuLock aria-hidden="true" /> Locked</>) : "Pay"}
+                </Button>
+              </HStack>
+              <Text fontSize="xs" color="gray.500">
+                {BACHS_LOCKED
+                  ? "Bachs deposits are in beta and will open soon. M-Pesa and Paystack are available now."
+                  : bachsUsdPreview
+                    ? `Priced at $${bachsUsdPreview} USD (1 USD ≈ KES ${bachsRate}); you can pay in your local currency at checkout. Your wallet is credited ${fmt(Number(bachsAmt))}.`
+                    : "Amounts are priced in USD. You'll be redirected to Bachs to pay, then brought back here."}
+              </Text>
+            </Stack>
+          </Box>
         </Box>
       </SimpleGrid>
 
