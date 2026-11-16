@@ -1,10 +1,12 @@
 // frontend/components/JobCard.tsx
 "use client";
 import { Box, Heading, Text, Badge, HStack, Button, Flex, Image, Collapsible, Wrap } from "@chakra-ui/react";
-import { LuChevronDown } from "react-icons/lu";
+import { LuChevronDown, LuLock } from "react-icons/lu";
 import { useState } from "react";
 import Link from "next/link";
 import { formatPostAge } from "@/lib/formatPostAge";
+import { useAuth } from "@/lib/AuthContext";
+import SignInModal from "./SignInModal";
 
 type Job = {
   id: string; title: string; location: string | null;
@@ -23,7 +25,9 @@ const LEVEL_LABELS: Record<string, string> = {
 };
 
 export default function JobCard({ job }: { job: Job }) {
+  const { user, loading } = useAuth();
   const [open, setOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
 
   const logoUrl = job.company_domain
     ? `https://www.google.com/s2/favicons?domain=${job.company_domain}&sz=64`
@@ -32,6 +36,21 @@ export default function JobCard({ job }: { job: Job }) {
   const techStack = job.tech_stack ?? [];
   const hasDetails = Boolean(job.description) || techStack.length > 0;
   const hasMatchScore = typeof job.match_score === "number";
+
+  // Signed-out users get the "Sign in to PerchRole" popup instead of navigating.
+  // The href stays on the link so the job URL remains crawlable for SEO.
+  // While the session is still loading, the click is ignored so signed-in
+  // users are never prompted by mistake.
+  const handleViewJob = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (loading) {
+      e.preventDefault();
+      return;
+    }
+    if (!user) {
+      e.preventDefault();
+      setModalOpen(true);
+    }
+  };
 
   return (
     <Box
@@ -97,7 +116,19 @@ export default function JobCard({ job }: { job: Job }) {
 
           <HStack mt={4} gap={3}>
             <Button asChild size="sm" colorPalette="brand">
-              <Link href={`/jobs/${job.id}`}>View Job</Link>
+              <Link
+                href={`/jobs/${job.id}`}
+                onClick={handleViewJob}
+                aria-haspopup={!user ? "dialog" : undefined}
+              >
+                {user ? (
+                  "View Job"
+                ) : (
+                  <>
+                    <LuLock style={{ marginRight: 6 }} /> Sign in to View
+                  </>
+                )}
+              </Link>
             </Button>
             {hasDetails && (
               <Button size="sm" variant="ghost" onClick={() => setOpen((prev) => !prev)} aria-expanded={open}>
@@ -141,6 +172,8 @@ export default function JobCard({ job }: { job: Job }) {
           )}
         </Box>
       </Flex>
+
+      <SignInModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
     </Box>
   );
 }
