@@ -1,7 +1,7 @@
 # backend/app/api/routes/analytics.py
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
@@ -20,7 +20,6 @@ from app.services import billing
 # Prefix and tags are set in app/main.py
 router = APIRouter()
 
-JobId = Job.__table__.c.id.type.python_type  # matches the jobs.id column type
 MIN_DAYS = 7
 
 
@@ -47,7 +46,7 @@ class EventIn(BaseModel):
 
 @router.post("/jobs/{job_id}/event", status_code=204)
 @limiter.limit("60/minute")
-def record_event(request: Request, job_id: JobId, body: EventIn, db: Session = Depends(get_db)):
+def record_event(request: Request, job_id: Any, body: EventIn, db: Session = Depends(get_db)):
     """Public, privacy-light counter: one upserted row per job per day."""
     if "bot" in (request.headers.get("user-agent") or "").lower():
         return Response(status_code=204)
