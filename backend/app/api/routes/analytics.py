@@ -15,15 +15,30 @@ from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.job import Company, Job
 from app.models.job_daily_stat import JobDailyStat as Stat
+from app.services import billing
 
 # Prefix and tags are set in app/main.py
 router = APIRouter()
 
 JobId = Job.__table__.c.id.type.python_type  # matches the jobs.id column type
+MIN_DAYS = 7
 
 
 def _today():
     return datetime.now(timezone.utc).date()
+
+
+def _plan_window(db: Session, domain: str) -> int | None:
+    """Widest analytics window the employer's plan allows, or None if unknown.
+    Never raises: analytics must keep working if billing is unavailable."""
+    if not domain:
+        return None
+    try:
+        sub = billing.live_subscription(db, domain)
+        cap = billing.entitlements(sub).get("analytics_days")
+        return cap if isinstance(cap, int) and cap > 0 else None
+    except Exception:
+        return None
 
 
 class EventIn(BaseModel):
@@ -62,13 +77,18 @@ def record_event(request: Request, job_id: JobId, body: EventIn, db: Session = D
 
 @router.get("/employer/summary")
 def employer_summary(
-    days: int = Query(14, ge=7, le=30),
+    days: int = Query(14, ge=MIN_DAYS, le=30),
     user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Stats for active listings whose company domain matches the signed-in user's email domain."""
     email = (user.get("email") or "").lower()
     domain = email.rsplit("@", 1)[-1] if "@" in email else ""
+
+    cap = _plan_window(db, domain)
+    if cap is not None:
+        days = max(MIN_DAYS, min(days, cap))
+
     since = _today() - timedelta(days=days - 1)
 
     jobs = []
