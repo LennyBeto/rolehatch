@@ -19,6 +19,7 @@ from app.models.ats_scan import ATSScanQuota, ATSScanPayment  # noqa
 from app.models.doc_builder import DocBuilderQuota, DocBuilderConsumption, DocBuilderPayment  # noqa
 from app.models.billing import EmployerSubscription, ProcessedPayment  # noqa
 from app.models.company_profile import CompanyProfile  # noqa
+from app.models.job_daily_stat import JobDailyStat  # noqa
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
