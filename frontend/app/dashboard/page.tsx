@@ -77,6 +77,7 @@ export default function EmployerDashboard() {
 
   const hasFetchedRef = useRef(false);
   const hasFetchedPlanRef = useRef(false);
+  const hasVerifiedFeatureRef = useRef(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/");
@@ -165,6 +166,43 @@ export default function EmployerDashboard() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  // Paystack returns here with ?reference=feat-... after a pay-per-listing payment.
+  // Confirm it with the server so the listing is featured even if the webhook is slow.
+  useEffect(() => {
+    if (!user || hasVerifiedFeatureRef.current) return;
+    const reference = new URLSearchParams(window.location.search).get("reference") ?? "";
+    if (!reference.startsWith("feat-")) return;
+    hasVerifiedFeatureRef.current = true;
+    window.history.replaceState(null, "", "/dashboard");
+    setConfirmingPlan(true);
+
+    (async () => {
+      try {
+        const res = await authedFetch(`/api/promote/verify/${encodeURIComponent(reference)}`);
+        const body = await res.json().catch(() => null);
+        if (res.ok && body?.featured) {
+          toaster.create({
+            title: "Listing featured",
+            description: `It's pinned to the top of search for ${FEATURE_DAYS} days.`,
+            type: "success",
+          });
+          await loadJobs();
+        } else {
+          toaster.create({
+            title: "Payment not confirmed yet",
+            description: errorText(body, "If you were charged, your listing will update shortly."),
+            type: "info",
+          });
+        }
+      } catch {
+        toaster.create({ title: "Couldn't confirm your payment", description: "Refresh in a minute.", type: "error" });
+      } finally {
+        setConfirmingPlan(false);
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
