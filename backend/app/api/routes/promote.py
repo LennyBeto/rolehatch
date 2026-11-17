@@ -1,8 +1,12 @@
 # backend/app/api/routes/promote.py
+import hashlib
+import hmac
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -15,6 +19,10 @@ from app.services import billing
 from app.services.employer_access import serialize_employer_job, user_email_domain
 
 router = APIRouter()
+
+PAYSTACK_API = "https://api.paystack.co"
+FEATURE_KES = 6500  # keep in step with the "$49 = KES 6,500" shown at checkout
+FEATURE_REF_PREFIX = "feat-"
 
 
 @router.get("/my-jobs")
@@ -157,3 +165,115 @@ def refresh_listing(job_id: uuid.UUID, user=Depends(get_current_user), db: Sessi
     db.commit()
     _bust_job_cache(job.id)
     return {"ok": True, "refresh_remaining": billing.entitlements(sub)["refresh_remaining"]}
+
+
+# ── Pay-per-listing (Paystack) ───────────────────────────────
+
+def _paystack_headers() -> dict:
+    return {"Authorization": f"Bearer {settings.paystack_secret_key}"}
+
+
+def _activate_feature(db: Session, data: dict) -> bool:
+    """Apply a successful pay-per-listing transaction. Safe to call repeatedly
+    (verify-on-return and the webhook can both fire): each reference counts once."""
+    if data.get("status") != "success" or data.get("currency") != "KES":
+        return False
+    if int(data.get("amount") or 0) < FEATURE_KES * 100:
+        return False
+
+    reference = data.get("reference", "")
+    if not reference.startswith(FEATURE_REF_PREFIX):
+        return False
+
+    meta = data.get("metadata") or {}
+    if meta.get("kind") != "feature":
+        return False
+    try:
+        job = db.query(Job).filter_by(id=uuid.UUID(str(meta.get("job_id")))).first()
+    except ValueError:
+        return False
+    if not job:
+        return False
+
+    # First caller for this reference wins; repeats just report success.
+    if not redis.set(f"feature_paid:{reference}", "1", ex=60 * 60 * 24 * 30, nx=True):
+        return True
+
+    now = datetime.now(timezone.utc)
+    start = job.featured_until if job.featured_until and job.featured_until > now else now
+    job.featured_until = start + timedelta(days=billing.FEATURE_DAYS)
+    db.commit()
+    _bust_job_cache(job.id)
+    return True
+
+
+@router.post("/checkout/{job_id}")
+def create_checkout(job_id: uuid.UUID, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    if not settings.paystack_secret_key:
+        raise HTTPException(503, "Payments aren't available right now")
+    billing.require_business_domain(user.get("email"))  # blocks free-mail accounts
+    job = _owned_job(db, user, job_id)
+
+    now = datetime.now(timezone.utc)
+    if job.featured_until and job.featured_until > now:
+        raise HTTPException(409, "This listing is already featured")
+
+    reference = f"{FEATURE_REF_PREFIX}{uuid.uuid4().hex}"
+    try:
+        with httpx.Client(timeout=20) as client:
+            r = client.post(
+                f"{PAYSTACK_API}/transaction/initialize",
+                headers=_paystack_headers(),
+                json={
+                    "email": user["email"],
+                    "amount": FEATURE_KES * 100,  # subunits
+                    "currency": "KES",
+                    "reference": reference,
+                    "callback_url": f"{settings.frontend_url}/dashboard",
+                    "metadata": {"kind": "feature", "job_id": str(job.id), "verified_by": user["sub"]},
+                },
+            )
+        body = r.json() if r.content else {}
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(502, "Couldn't reach Paystack. Please try again.")
+
+    if r.status_code != 200 or not body.get("status"):
+        raise HTTPException(502, body.get("message") or "Paystack couldn't start checkout")
+    return {"checkout_url": body["data"]["authorization_url"], "reference": reference}
+
+
+@router.get("/verify/{reference}")
+def verify_checkout(reference: str, user=Depends(get_current_user), db: Session = Depends(get_db)):
+    if not reference.startswith(FEATURE_REF_PREFIX):
+        raise HTTPException(400, "Not a listing payment reference")
+    try:
+        with httpx.Client(timeout=20) as client:
+            r = client.get(f"{PAYSTACK_API}/transaction/verify/{reference}", headers=_paystack_headers())
+        body = r.json() if r.content else {}
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(502, "Couldn't verify the payment. Please try again.")
+
+    if r.status_code != 200 or not body.get("status"):
+        raise HTTPException(502, "Couldn't verify the payment. Please try again.")
+
+    data = body["data"]
+    if (data.get("metadata") or {}).get("verified_by") != user["sub"]:
+        raise HTTPException(403, "This payment belongs to another account")
+    return {"featured": _activate_feature(db, data), "status": data.get("status")}
+
+
+@router.post("/webhook")
+async def paystack_feature_webhook(request: Request, db: Session = Depends(get_db)):
+    """Backup activation. Paystack only allows one webhook URL per account, so if yours
+    points elsewhere, verify-on-return above still activates the listing."""
+    raw = await request.body()
+    sent = request.headers.get("x-paystack-signature", "")
+    expected = hmac.new(settings.paystack_secret_key.encode(), raw, hashlib.sha512).hexdigest()
+    if not hmac.compare_digest(sent, expected):
+        raise HTTPException(400, "Invalid signature")
+
+    event = json.loads(raw)
+    data = event.get("data") or {}
+    if event.get("event") == "charge.success" and str(data.get("reference", "")).startswith(FEATURE_REF_PREFIX):
+        _activate_feature(db, data)
+    return {"received": True}
