@@ -6,6 +6,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { formatPostAge } from "@/lib/formatPostAge";
 import { useAuth } from "@/lib/AuthContext";
+import { trackListingEvent } from "@/lib/trackEvent";
 import SignInModal from "./SignInModal";
 
 type Job = {
@@ -49,7 +50,15 @@ export default function JobCard({ job }: { job: Job }) {
     if (!user) {
       e.preventDefault();
       setModalOpen(true);
+      return;
     }
+    // Signed-in click opens the listing page: count it as a view (fire-and-forget).
+    trackListingEvent(job.id, "view");
+  };
+
+  const handleToggleDetails = () => {
+    if (!open) trackListingEvent(job.id, "view");
+    setOpen((prev) => !prev);
   };
 
   return (
@@ -131,7 +140,7 @@ export default function JobCard({ job }: { job: Job }) {
               </Link>
             </Button>
             {hasDetails && (
-              <Button size="sm" variant="ghost" onClick={() => setOpen((prev) => !prev)} aria-expanded={open}>
+              <Button size="sm" variant="ghost" onClick={handleToggleDetails} aria-expanded={open}>
                 Details
                 <Box
                   as={LuChevronDown}
