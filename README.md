@@ -1,6 +1,6 @@
 # PerchRole
 
-A free-for-job-seekers job search platform: listings aggregated directly from company career pages (Greenhouse, Lever, Workday, BambooHR), with fast filterable search, an applicant dashboard (profile, CV and cover letter builders, ATS scan), the Perchie AI assistant, and a promoted-listings model for employers. Payments run through Paystack.
+A free-for-job-seekers job search platform: listings aggregated directly from company career pages (Greenhouse, Lever, Workday, BambooHR, Ashby, SmartRecruiters, Workable, Recruitee), with fast filterable search, an applicant dashboard (profile, CV and cover letter builders, ATS scan), the Perchie AI assistant, and analytics and promotion tools for employers. Payments run through Paystack.
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-2F4F3F)
 
@@ -22,6 +22,7 @@ A free-for-job-seekers job search platform: listings aggregated directly from co
 - [Applicant Dashboard](#applicant-dashboard)
 - [Perchie Chatbot](#perchie-chatbot)
 - [Payments & Monetization](#payments--monetization)
+- [Employer Analytics](#employer-analytics)
 - [Paywall Rules](#paywall-rules)
 - [Community: PerchRole Tech Hub](#community-perchrole-tech-hub)
 - [Performance & Scalability](#performance--scalability)
@@ -38,14 +39,14 @@ A free-for-job-seekers job search platform: listings aggregated directly from co
 PerchRole solves the two-sided problem every job board has: job seekers want fresh, real listings without noise, and employers want visibility without paying agency fees. PerchRole pulls postings directly from the ATS platforms companies already use, with no manual re-posting. Browsing and searching stay free; revenue comes from promoted listings paid for by employers, plus usage-based paywalls on premium applicant tools (see [Paywall Rules](#paywall-rules)).
 
 **Core features:**
-- Multi-source job aggregation (Greenhouse, Lever, Workday, BambooHR)
+- Multi-source job aggregation (Greenhouse, Lever, Workday, BambooHR, Ashby, SmartRecruiters, Workable, Recruitee)
 - Fast, cached, filterable search (location, salary, remote type, keyword, quick-filter chips)
 - Magic-link authentication (no passwords to manage or leak)
 - Save / Mark Applied / Hide tracking, with hidden jobs auto-deleted after 5 days
 - Applicant dashboard: profile with avatar, CV upload and parsed summary, ATS-friendly CV templates, ATS-ready cover letter builder, ATS scan
 - Perchie, the in-site AI assistant (Google AI Studio / Gemini)
-- Employer dashboard with domain-verified ownership; personal free-mail addresses are blocked from posting and promoting
-- Paystack-powered promoted listings (feature a posting for 14 days) and a wallet with multiple payment options
+- Employer dashboard with domain-verified ownership, listing analytics, and plan-based promotion and refresh credits; personal free-mail addresses are blocked from posting and promoting
+- Paystack-powered promoted listings (KES 6,500 for 14 days) and a wallet with multiple payment options
 - Usage-based paywalls (CV builder, ATS scan, job views, CV templates)
 - PerchRole Tech Hub Discord community with a jobs feed
 - Hourly automated re-sync with stale-listing cleanup
@@ -238,7 +239,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-public-key
 
 ## Database & Migrations
 
-Schema lives in `backend/app/models/`: `Company`, `Job`, `SavedJob`, `JobAlert`, `ContactMessage`, plus the tables backing paywall quotas and credits.
+Schema lives in `backend/app/models/`: `Company`, `Job`, `SavedJob`, `JobAlert`, `JobDailyStat`, `ContactMessage`, plus the tables backing employer subscriptions, paywall quotas and credits.
 
 ```bash
 cd backend
@@ -288,6 +289,10 @@ Adapters live in `backend/app/services/scrapers/`, one per source:
 | Lever | Public JSON API | `api.lever.co/v0/postings`; stable, documented |
 | Workday | Internal CXS endpoint | Undocumented, self-throttled, per-tenant |
 | BambooHR | Public careers feed | Undocumented, verify ToS per tenant |
+| Ashby | Public jobs API | Board-token based |
+| SmartRecruiters | Public jobs API | Company identifier based |
+| Workable | Public jobs API | Account/subdomain based |
+| Recruitee | Public careers API | Company identifier based |
 
 `pipeline.py` orchestrates: fetch → Redis dedup pre-check → idempotent Postgres upsert (`ON CONFLICT (source, external_id) DO UPDATE`) → deactivate postings not seen in the current run. It also infers level, remote type and tech stack from each posting. Triggered hourly via Cloud Scheduler → `POST /internal/sync-jobs` (shared-secret header, not a user JWT).
 
@@ -341,10 +346,10 @@ Perchie is the site-wide assistant, mounted as a chat widget. It answers questio
 
 Card and mobile-money checkout for promoted listings and paywalled features runs through **Paystack**.
 
-**Promoted listings:** employers pay to pin a listing to the top of search results for 14 days ($49 default, configurable).
+**Promoted listings:** employers pay KES 6,500 (approximately $49) to pin a listing to the top of search results for 14 days. Employers can also feature listings using credits included with an active employer plan.
 
 - **Checkout:** `POST /api/promote/checkout/{job_id}` initializes a Paystack transaction and returns the authorization URL
-- **Activation:** only via the signature-verified Paystack webhook (HMAC-SHA512 of the raw body against `PAYSTACK_SECRET_KEY`, header `x-paystack-signature`); never trusted from a client redirect
+- **Confirmation:** on return to the dashboard, the signed-in user can trigger `GET /api/promote/verify/{reference}`; the backend verifies the transaction directly with Paystack before activating the listing. The signature-verified Paystack webhook (HMAC-SHA512 of the raw body against `PAYSTACK_SECRET_KEY`, header `x-paystack-signature`) is also supported as a backup. A browser redirect alone never proves payment
 - **Employer verification:** gated on the signed-in user's email domain matching the job's `Company.domain`. Free-mail domains (Gmail, Yahoo, Outlook, etc.) are blocked on both `/post-job` and promote, so personal accounts cannot post
 - **Dashboard:** `/dashboard` shows an employer their own domain-matched listings and lets them promote directly
 
@@ -359,6 +364,18 @@ Card and mobile-money checkout for promoted listings and paywalled features runs
 | Wise | Planned |
 
 Providers are added one at a time; each is isolated so existing options keep working.
+
+**Employer plans:** Starter, Growth and Enterprise plans provide recurring monthly featured-listing credits and listing refreshes. Their configured analytics windows are 7, 14 and 30 days respectively; backend tier enforcement remains disabled until plans go live. Enterprise also includes a partner logo, company page and newsletter placement. Paystack plan codes must be configured before a plan can be purchased.
+
+---
+
+## Employer Analytics
+
+The employer dashboard reports views and apply clicks for active listings owned by the signed-in user's verified company email domain. It shows daily totals and per-listing totals over selectable 7-, 14- or 30-day windows, plus a click rate.
+
+- `POST /api/analytics/jobs/{job_id}/event` records a `view` or `apply_click`; daily counters are upserted per listing, and bot user agents are ignored
+- `GET /api/analytics/employer/summary?days=14` returns the time series, totals and per-listing summary for the authenticated employer
+- Event writes are rate-limited; reporting is scoped server-side to the employer's active, domain-matched listings
 
 ---
 
@@ -494,8 +511,7 @@ Features are shipped one at a time, each with its own `git add` and commit.
 - [ ] Discord members-only channel paywall (one-time fee)
 - [ ] Salary insights widget per role/company, aggregated from scraped data
 - [ ] Talent Network: opt-in candidate pool with employer search access
-- [ ] Employer analytics (listing views, applicant counts)
-- [ ] Additional/direct career-page scraping fallback beyond the four current sources (e.g. Workable)
+- [ ] Direct career-page scraping fallback for employers without a supported ATS
 - [ ] Live-mode Paystack cutover (currently test mode)
 
 ---
