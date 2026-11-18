@@ -24,9 +24,10 @@ STATS_CACHE_TTL = 1800
 JOB_DETAIL_CACHE_TTL = 3600
 
 # Bumped so stale cached results are discarded (new remote_type values, salary range
-# semantics, title/tech matching, include_unlisted, region/visa filters). cache.py
+# semantics, title/tech matching, include_unlisted, region/visa filters, and the
+# open_to_africa / visa_sponsorship flags now returned on each row). cache.py
 # invalidates with the wildcard 'search*', so a future bump needs no other change.
-SEARCH_CACHE_PREFIX = "search_v6"
+SEARCH_CACHE_PREFIX = "search_v7"
 
 SALARY_SLIDER_MAX = 300   # slider's top end ($k) — treated as "no upper limit"
 SHORT_TERM_LEN = 3        # terms this short match on word boundaries ("pm" != "development")
@@ -106,6 +107,7 @@ def build_search_query(
             Job.level, Job.tech_stack, Job.description,
             Job.salary_min, Job.salary_max, Job.source, Job.source_url,
             Job.is_active, Job.featured_until, Job.posted_at,
+            Job.open_to_africa, Job.visa_sponsorship,
             Company.name.label("company_name"), Company.domain.label("company_domain"),
         )
         .join(Company, Job.company_id == Company.id)
@@ -234,6 +236,9 @@ def _serialize_row(row, now: datetime) -> dict:
         "is_active": m["is_active"],
         "is_featured": bool(m["featured_until"] and m["featured_until"] > now),
         "posted_at": m["posted_at"].isoformat() if m["posted_at"] else None,
+        # Generated columns can be NULL; the card only needs a strict boolean
+        "open_to_africa": bool(m["open_to_africa"]),
+        "visa_sponsorship": bool(m["visa_sponsorship"]),
         "company_name": m["company_name"],
         "company_domain": m["company_domain"],
     }
