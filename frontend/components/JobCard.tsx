@@ -16,6 +16,7 @@ type Job = {
   salary_min: number | null; salary_max: number | null;
   source: string; source_url: string; is_featured: boolean;
   posted_at: string | null; company_name: string | null; company_domain: string | null;
+  open_to_africa?: boolean; visa_sponsorship?: boolean;
   match_score?: number;
 };
 
@@ -66,7 +67,8 @@ export default function JobCard({ job }: { job: Job }) {
       bg="surface"
       p={5}
       borderRadius="lg"
-      border="1px solid #E5E3DD"
+      borderWidth="1px"
+      borderColor="line"
       position="relative"
       transition="box-shadow 0.15s ease"
       _hover={{ boxShadow: "0 4px 16px rgba(0,0,0,0.06)" }}
@@ -117,6 +119,8 @@ export default function JobCard({ job }: { job: Job }) {
 
           <HStack gap={2} mt={3} flexWrap="wrap">
             {job.remote_type && <Badge colorPalette="brand" variant="subtle" textTransform="capitalize">{job.remote_type}</Badge>}
+            {job.open_to_africa && <Badge colorPalette="brand" variant="subtle">Open to Africa</Badge>}
+            {job.visa_sponsorship && <Badge colorPalette="brand" variant="outline">Visa / relocation</Badge>}
             {job.level && <Badge variant="outline">{LEVEL_LABELS[job.level] ?? job.level}</Badge>}
             {job.commitment && <Badge variant="outline">{job.commitment}</Badge>}
             <Badge variant="outline" textTransform="capitalize">{job.source}</Badge>
@@ -155,7 +159,7 @@ export default function JobCard({ job }: { job: Job }) {
           {hasDetails && (
             <Collapsible.Root open={open}>
               <Collapsible.Content>
-                <Box mt={4} pt={4} borderTop="1px solid #E5E3DD">
+                <Box mt={4} pt={4} borderTopWidth="1px" borderColor="line">
                   {techStack.length > 0 && (
                     <Box mb={3}>
                       <Text fontSize="xs" color="gray.500" mb={1} textTransform="uppercase" fontWeight="600">
