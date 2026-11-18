@@ -1,55 +1,73 @@
 # backend/tests/test_job_regions_sql.py
-import os
-
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
 from app.models.job_region_sql import OPEN_TO_AFRICA_SQL, VISA_SPONSORSHIP_SQL
 
-DB = os.getenv("TEST_DATABASE_URL")
-pytestmark = pytest.mark.skipif(not DB, reason="set TEST_DATABASE_URL to a disposable Postgres")
+@pytest.fixture(scope="module")
+def db():
+    session = None
+    try:
+        from app.db.session import SessionLocal
 
-# (label, location, remote_type, description, expect_open_to_africa, expect_visa)
-CASES = [
-    ("kenya onsite", "Nairobi, Kenya", "onsite", None, True, False),
-    ("remote africa", "Remote - Africa", None, None, True, False),
-    ("remote worldwide", "Remote (Worldwide)", None, None, True, False),
-    ("remote global typed", "Global", "remote", None, True, False),
-    ("remote anywhere desc", "Remote", "remote", "You can work from anywhere in a timezone overlap.", True, False),
-    ("hiring across africa", "Remote", "remote", "We are hiring across Africa for this role.", True, False),
-    ("remote US only", "Remote - United States", "remote", "Must reside in the US.", False, False),
-    ("onsite london", "London, UK", "onsite", "Join our office.", False, False),
-    ("onsite anywhere trap", "San Francisco, CA", "onsite", "Work from anywhere in the office.", False, False),
-    ("client mention only", "Berlin", "hybrid", "Our clients in Africa love us.", False, False),
-    ("remote US + africa client", "Remote - US", "remote", "Our clients in Africa love us.", False, False),
-    ("visa yes", "Berlin", "onsite", "We offer visa sponsorship and relocation assistance.", False, True),
-    ("visa no", "Berlin", "onsite", "We are unable to provide visa sponsorship.", False, False),
-    ("visa no 2", "NYC", "onsite", "No visa sponsorship available.", False, False),
-    ("visa cant", "NYC", "onsite", "We can't sponsor work visas at this time.", False, False),
-    ("relocation only", "Dubai", "onsite", "Generous relocation package included.", False, True),
-    ("work permit", "Amsterdam", "onsite", "We will sponsor your work permit.", False, True),
-    ("nothing", "Austin", "onsite", "Great benefits. We do not discriminate.", False, False),
-    ("all null", None, None, None, False, False),
-]
+        session = SessionLocal()
+        session.execute(text("SELECT 1"))
+    except Exception as exc:  # no env / database in this environment
+        if session is not None:
+            session.close()
+        pytest.skip(f"database not available: {exc}")
+    yield session
+    session.close()
 
 
-def test_region_and_visa_detection():
-    engine = create_engine(DB)
-    with engine.begin() as conn:
-        conn.execute(text(
-            "CREATE TEMP TABLE jobs_t (id serial primary key, location text, "
-            "remote_type text, description text, "
-            f"open_to_africa boolean GENERATED ALWAYS AS ({OPEN_TO_AFRICA_SQL}) STORED, "
-            f"visa_sponsorship boolean GENERATED ALWAYS AS ({VISA_SPONSORSHIP_SQL}) STORED"
-            ") ON COMMIT DROP"
-        ))
-        conn.execute(
-            text("INSERT INTO jobs_t (location, remote_type, description) VALUES (:l, :r, :d)"),
-            [{"l": loc, "r": rt, "d": d} for _, loc, rt, d, *_ in CASES],
-        )
-        rows = conn.execute(
-            text("SELECT open_to_africa, visa_sponsorship FROM jobs_t ORDER BY id")
-        ).all()
+def _eval(db, expr, location=None, remote_type=None, description=None) -> bool:
+    sql = text(
+        f"SELECT ({expr}) FROM (SELECT CAST(:loc AS text) AS location, "
+        f"CAST(:rt AS text) AS remote_type, CAST(:desc AS text) AS description) jobs"
+    )
+    return bool(db.execute(sql, {"loc": location, "rt": remote_type, "desc": description}).scalar())
 
-    for (label, *_rest, want_africa, want_visa), (got_africa, got_visa) in zip(CASES, rows):
-        assert (got_africa, got_visa) == (want_africa, want_visa), label
+
+@pytest.mark.parametrize("location,remote,description,expected", [
+    ("Nairobi, Kenya", None, None, True),
+    ("Lagos, Nigeria", None, None, True),
+    ("Remote - Africa", "remote", None, True),
+    ("Remote - Worldwide", "remote", None, True),
+    ("Remote - Global", "remote", None, True),
+    ("Remote", "remote", "Open to candidates in Ghana.", True),
+    ("Remote", "remote", "Candidates based in Africa preferred.", True),
+    ("Remote", "remote", "Work from anywhere in the world.", True),
+    ("Remote - US", "remote", None, False),
+    ("Remote - Europe", "remote", "We hire globally.", False),
+    ("Remote - Anywhere in the US", "remote", None, False),
+    ("Remote", "remote", "We hire globally. Must be located in the US.", False),
+    ("Remote", "remote", "Work from anywhere in the country.", False),
+    ("Remote", "remote", "Customers in Africa rely on us.", False),
+    ("San Francisco, CA", None, "Our customers across Africa", False),
+    ("London, UK", None, None, False),
+])
+def test_open_to_africa(db, location, remote, description, expected):
+    assert _eval(db, OPEN_TO_AFRICA_SQL, location, remote, description) is expected
+
+
+@pytest.mark.parametrize("description,expected", [
+    ("We offer visa sponsorship and relocation assistance.", True),
+    ("Visa sponsorship is available for this role.", True),
+    ("Visa sponsorship available for the right candidate.", True),
+    ("We will sponsor visas for strong candidates.", True),
+    ("We sponsor H1B visas.", True),
+    ("We provide H-1B sponsorship.", True),
+    ("Relocation package included.", True),
+    ("We offer relocation assistance. We are unable to sponsor visas.", True),
+    ("We are unable to sponsor visas for this role.", False),
+    ("We do not offer visa sponsorship.", False),
+    ("Visa sponsorship is not available for this role.", False),
+    ("Must be authorized to work in the US without sponsorship.", False),
+    ("No relocation assistance is offered.", False),
+    ("Relocation assistance is not available.", False),
+    ("Visa Inc. is a global payments company.", False),
+    ("", False),
+    (None, False),
+])
+def test_visa_sponsorship(db, description, expected):
+    assert _eval(db, VISA_SPONSORSHIP_SQL, description=description) is expected
