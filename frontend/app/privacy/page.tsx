@@ -4,9 +4,15 @@ import NextLink from "next/link";
 
 export const metadata = { title: "Privacy Policy — PerchRole" };
 
-const LAST_UPDATED = "November 15, 2026";
+const LAST_UPDATED = "November 19, 2026";
 
-type Section = { title: string; body?: string[]; items?: string[]; after?: string };
+type Section = {
+  title: string;
+  body?: string[];
+  items?: string[];
+  after?: string;
+  link?: { prefix: string; label: string; href: string };
+};
 
 const SECTIONS: Section[] = [
   {
@@ -77,6 +83,11 @@ const SECTIONS: Section[] = [
     body: [
       "We use your browser's local storage to remember your light/dark theme preference and to keep you signed in. Cloudflare may set security cookies to protect the site from abuse. We do not use advertising or cross-site tracking cookies.",
     ],
+    link: {
+      prefix: "A full list of what we store, and why, is in our ",
+      label: "Cookie Policy",
+      href: "/cookies",
+    },
   },
   {
     title: "8. Data retention",
@@ -127,6 +138,20 @@ export default function PrivacyPolicyPage() {
               </List.Root>
             )}
             {s.after && <Text fontSize="sm" lineHeight="1.7" mt={2}>{s.after}</Text>}
+            {s.link && (
+              <Text fontSize="sm" lineHeight="1.7" mt={2}>
+                {s.link.prefix}
+                <ChakraLink
+                  asChild
+                  color="brand.fg"
+                  textDecoration="underline"
+                  _focusVisible={{ outline: "2px solid", outlineColor: "brand.fg", outlineOffset: "2px", borderRadius: "sm" }}
+                >
+                  <NextLink href={s.link.href}>{s.link.label}</NextLink>
+                </ChakraLink>
+                .
+              </Text>
+            )}
           </Box>
         ))}
 
