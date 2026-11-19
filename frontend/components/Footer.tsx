@@ -22,6 +22,7 @@ const COMPANY_LINKS = [
 
 const LEGAL_LINKS = [
   { label: "Privacy Policy", href: "/privacy" },
+  { label: "Cookie Policy", href: "/cookies" },
   { label: "Terms of Service", href: "/terms" },
   { label: "Contact Support", href: "/contact" },
 ];
