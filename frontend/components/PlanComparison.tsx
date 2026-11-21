@@ -43,10 +43,12 @@ export default function PlanComparison() {
       <Heading as="h3" size="md" color="text" mb={4} textAlign="center">Compare plans</Heading>
 
       <Box overflowX="auto" border="1px solid" borderColor="line" borderRadius="lg" bg="surface">
-        <Table.Root size="sm" minW="720px">
+        {/* CHANGED: minW 720px -> 620px (three columns instead of four) */}
+        <Table.Root size="sm" minW="620px">
           <Table.Header>
             <Table.Row bg="background">
-              <Table.ColumnHeader position="sticky" left={0} zIndex={1} bg="background" minW="200px">
+              {/* CHANGED: label column minW 200px -> 180px */}
+              <Table.ColumnHeader position="sticky" left={0} zIndex={1} bg="background" minW="180px">
                 <Text as="span" fontSize="xs" color="fg.muted">What's included</Text>
               </Table.ColumnHeader>
               {COLUMNS.map((col) => (
@@ -68,14 +70,13 @@ export default function PlanComparison() {
             {SECTIONS.map((section) => (
               <Fragment key={section.title}>
                 <Table.Row>
+                  {/* CHANGED: sentence case instead of uppercase + tracked-out letters */}
                   <Table.Cell
                     colSpan={COLUMNS.length + 1}
                     bg="background"
-                    fontSize="xs"
+                    fontSize="sm"
                     fontWeight="600"
-                    textTransform="uppercase"
-                    letterSpacing="wide"
-                    color="fg.muted"
+                    color="text"
                   >
                     {section.title}
                   </Table.Cell>
