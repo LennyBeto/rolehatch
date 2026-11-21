@@ -78,6 +78,23 @@ export type EmployerPlan = {
 /** Analytics window for employers without a plan (matches the backend baseline). */
 export const BASELINE_ANALYTICS_DAYS = 7;
 
+// CHANGED: tier 1 of the three-tier ladder. One-time featured listing, no subscription.
+const PAYG_PAYMENT_LABELS = PAYMENT_METHOD_ORDER
+  .filter((key) => FEATURE_PRICING[key].live)
+  .map((key) => FEATURE_PRICING[key].label)
+  .join(" or ");
+
+export const PAYG_PLAN = {
+  name: "Pay as you go",
+  summary: "Feature one role at a time. No subscription.",
+  features: [
+    { text: `1 featured listing, pinned to the top for ${FEATURE_DAYS} days` },
+    { text: "Shown above standard listings in every matching search" },
+    { text: `Pay with ${PAYG_PAYMENT_LABELS}` },
+    { text: "No recruiter fees, pay only for visibility" },
+  ] as PlanFeature[],
+};
+
 const PERK_LABELS: Record<PerkKey, string> = {
   partnerLogo: "Your logo in the homepage hiring partners strip",
   companyPage: "Your own company page on PerchRole",
@@ -123,6 +140,8 @@ function makePlan(seed: PlanSeed): EmployerPlan {
 }
 
 export const EMPLOYER_PLANS: Record<EmployerPlanId, EmployerPlan> = {
+  // Retired from the public pricing display (it undercut the $49 pay-as-you-go price).
+  // Kept here only so the ids stay aligned with PLANS in backend billing.py.
   starter: makePlan({
     name: "Starter",
     amount: 29,
@@ -167,8 +186,9 @@ export const EMPLOYER_PLANS: Record<EmployerPlanId, EmployerPlan> = {
   }),
 };
 
-/** Display order of the plan cards. */
-export const EMPLOYER_PLAN_ORDER: readonly EmployerPlanId[] = ["starter", "growth", "enterprise"];
+/** Plan cards shown after "Pay as you go". Three tiers in total. */
+// CHANGED: "starter" removed from the display order.
+export const EMPLOYER_PLAN_ORDER: readonly EmployerPlanId[] = ["growth", "enterprise"];
 
 /** Gets the "Recommended" badge and the highlighted border. */
 export const RECOMMENDED_PLAN: EmployerPlanId = "growth";
@@ -234,7 +254,8 @@ export function buildComparison(): ComparisonSection[] {
     {
       title: "Visibility and brand",
       rows: [
-        { label: `Featured placement (${FEATURE_DAYS} days each)`, cells: [true, true, true, true] },
+        // CHANGED: was a hardcoded 4-cell row; now follows the number of columns.
+        { label: `Featured placement (${FEATURE_DAYS} days each)`, cells: [true, ...plans.map(() => true)] },
         { label: "Homepage hiring partners logo", cells: perk("partnerLogo") },
         { label: "Your own company page", cells: perk("companyPage"), soon: soon("companyPage") },
         { label: "Newsletter feature", cells: perk("newsletter"), soon: soon("newsletter") },
